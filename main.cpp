@@ -60,5 +60,17 @@ struct pci_resource map_pci_resource(const char* pci_addr) {
 
 int main()
 {
+    // TODO:
+    // Our task: read one block from the NVMe device and print it.
+    //    1) Open the NVMe device
+    //    2) Map BAR0 to the address space of the driver
+    //    3) Configure & reset the controller
+    //    4) Setup admin queue
+    //    5) Create I/O queue via sending admin commands
+    //    6) Submit an I/O command to an I/O queue
     
+    // 1) Open the main VFIO interface to create a new IOMMU container
+    int vfio_fd = open("/dev/vfio/vfio", O_RDWR);
+
+
 }

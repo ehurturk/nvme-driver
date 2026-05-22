@@ -48,7 +48,7 @@ Extension:
 Resources:
 - Linux NVMe driver: https://github.com/torvalds/linux/blob/master/include/linux/nvme.h
 - Linux NVMe implementation: https://github.com/torvalds/linux/blob/master/drivers/nvme/host/core.c#L1806
-- NVMe Base Specification: https://nvmexpress.org/wp-content/uploads/NVM-Express-1_4c-2021.06.28-Ratified.pdf
+- NVMe Base Specification: https://nvmexpress.org/wp-content/uploads/NVM-Express-Base-Specification-Revision-2.3-2025.08.01-Ratified.pdf
 - SPDK NVMe docs: https://github.com/spdk/spdk/blob/master/doc/nvme_spec.md
 - NVME Architectures:
     - Oracle: https://blogs.oracle.com/linux/overview-of-nvme-architecture

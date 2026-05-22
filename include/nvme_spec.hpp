@@ -93,38 +93,14 @@ polled. Note that even though polling is a form of busy waiting, in this case it
 is far more efficient than interrupts which incur context switch costs. SPDK
 also polls on the phase bit.
 
-Things to implement:
-
-NvmeQueuePair:
-- submission queue array
-- completion queue array
-- submission queue tail index
-- completion queue head index
-- expected phase
-- request pool?
-- tracker array?
-- tracker free list?
-- software queue?
-
-NvmeRequest:
-- command
-- callback
-- callback_args
-- buffer info
-
-NvmeTracker:
-- request pointer
-- cid
-- PRP list memory?
-
 */
 
 namespace nvme {
 
-enum class ControlType : uint8_t {
-  NVME_CTL_IO = 1,    // io controller
-  NVME_CTL_DISC = 2,  // discovery controller
-  NVME_CTL_ADMIN = 3  // admin controller
+enum class ControllerType : uint8_t {
+  NVME_CTL_IO = 1,    // io controller (standard NVMe controller)
+  NVME_CTL_DISC = 2,  // discovery controller (NVMe-oF specific)
+  NVME_CTL_ADMIN = 3  // admin controller (opt)
 };
 
 enum class TransportType : uint8_t {
@@ -154,6 +130,11 @@ struct alignas(4096) NvmeBar0 {
                              // etc...
 };
 
+// address should be at bar0_base + 0x1000 + (2 * qid) * (4 << dstrd)
+struct NvmeDoorbells {
+  // doorbell registers here (they are part of BAR0)
+};
+
 static_assert(std::is_standard_layout_v<NvmeBar0>);
 static_assert(offsetof(NvmeBar0, vs) == 0x0008);
 static_assert(offsetof(NvmeBar0, intms) == 0x000C);
@@ -161,30 +142,57 @@ static_assert(offsetof(NvmeBar0, cc) == 0x0014);
 static_assert(offsetof(NvmeBar0, csts) == 0x001C);
 static_assert(offsetof(NvmeBar0, asq) == 0x0028);
 static_assert(offsetof(NvmeBar0, acq) == 0x0030);
+static_assert(offsetof(NvmeBar0, cmbloc) == 0x0038);
+
+struct QueuePair {
+  // submission queue
+  // completion queue
+  // submission queue tail index
+  // completion queue head index
+  // tracker array for the queues
+  // memory pool of request structs
+  // free list of tracker CIDs
+  // expected phase
+};
+
+struct Tracker {
+  // CID
+  // Request*
+  // PRP list memory?
+};
+
+struct Request {
+  // command
+  // callback fn
+  // callback args
+  // buffer info
+};
 
 namespace cap {
 
 using Mqes = utils::BitField<uint64_t, 0, 16>;     // Max Queue Entries
 using Timeout = utils::BitField<uint64_t, 24, 8>;  // Timeout (500ms units)
-using Stride = utils::BitField<uint64_t, 32, 4>;   // Doorbell Stride
-using Nssrc = utils::BitField<uint64_t, 36, 1>;    // NVM Subsystem Reset
+using DStride = utils::BitField<uint64_t, 32, 4>;  // Doorbell Stride
+using Nssrs = utils::BitField<uint64_t, 36, 1>;    // NVM Subsystem Reset
 using Css = utils::BitField<uint64_t, 37, 8>;      // Command Sets Supported
 using Mpsmin = utils::BitField<uint64_t, 48, 4>;   // Min Page Size (2^(12+n))
 using Mpsmax = utils::BitField<uint64_t, 52, 4>;   // Max Page Size
-using Cmbs = utils::BitField<uint64_t, 57, 1>;     // CMB Supported
+using Pmrs =
+    utils::BitField<uint64_t, 56, 1>;  // Persistent Memory Region Supported
+using Cmbs = utils::BitField<uint64_t, 57, 1>;  // CMB Supported
 
 }  // namespace cap
 
 namespace cc {
 
-using EN = utils::BitField<uint32_t, 0, 1>;    // Enable
-using CSS = utils::BitField<uint32_t, 4, 3>;   // IO Command Set Selected
-using MPS = utils::BitField<uint32_t, 7, 4>;   // Memory Page Size
-using AMS = utils::BitField<uint32_t, 11, 3>;  // Arbitration Mechanism Selected
-using SHN = utils::BitField<uint32_t, 14, 2>;  // Shutdown Notification
-using IOSQES =
+using En = utils::BitField<uint32_t, 0, 1>;    // Enable
+using Css = utils::BitField<uint32_t, 4, 3>;   // IO Command Set Selected
+using Mps = utils::BitField<uint32_t, 7, 4>;   // Memory Page Size
+using Ams = utils::BitField<uint32_t, 11, 3>;  // Arbitration Mechanism Selected
+using Shn = utils::BitField<uint32_t, 14, 2>;  // Shutdown Notification
+using Iosqes =
     utils::BitField<uint32_t, 16, 4>;  // IO Submission Queue Entry Size
-using IOCQES =
+using Iocqes =
     utils::BitField<uint32_t, 20, 4>;  // IO Completion Queue Entry Size
 
 }  // namespace cc
@@ -198,15 +206,15 @@ enum class Opcode : uint8_t {
   WriteUncorrected = 0x04,
   Compare = 0x05,
   WriteZeroes = 0x08,
-  DSM = 0X09,
-  VERIFY = 0X0C,
+  Dsm = 0X09,
+  Verify = 0X0C,
   ResvRegister = 0x0D,
-  ResvReport = 0x0e,
+  ResvReport = 0X0E,
 };
 
 enum class AdminOpcode : uint8_t {
   DeleteSq = 0x00,
-  CreatESq = 0x01,
+  CreateSq = 0x01,
   GetLogPage = 0x02,
   DeleteCq = 0x04,
   CreateCq = 0x05,
