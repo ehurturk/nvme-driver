@@ -169,10 +169,75 @@ int main()
     std::uint64_t cap = utils::MMIORead(controller_properties->cap);
     // Extract MQES (maximum queue entry size) and Doorbell stride values
     // from the CAP.
-    auto mqes = nvme::cap::Mqes::extract(cap);
-    auto dstr = nvme::cap::DStride::extract(cap);
+    auto mqes = nvme::cap::MQES::extract(cap);
+    auto dstr = nvme::cap::DSTR::extract(cap);
 
     std::println("MQES: {}\nDSTR: {}", mqes, dstr);
+
+    auto vs = utils::MMIORead(controller_properties->vs);
+    auto minor = nvme::vs::MinorVersion::extract(vs);
+    auto major = nvme::vs::MajorVersion::extract(vs);
+
+    std::println("{}.{}", major, minor);
+
+    // Configure the Controller
+
+    volatile std::uint32_t cc = utils::MMIORead(controller_properties->cc);
+    cc = nvme::cc::EN::insert(cc, 0b0);
+    // TODO: Poll for CSTS.RDY to be 0?
+
+    auto capAms = nvme::cap::AMS::extract(cap);
+    auto capMPSMax = nvme::cap::MPSMax::extract(cap);
+    auto capMPSMin = nvme::cap::MPSMin::extract(cap);
+    std::uint8_t capCss = nvme::cap::CSS::extract(cap);
+
+    // Set CC.AMS
+    uint8_t ccAms {};
+    if (capAms == 0) {
+        std::println("AMS: Vendor specific.");
+        ccAms = 0b111;
+    } else if (capAms == 1) {
+        std::println("AMS: WRRUPC");
+        ccAms = 0b1;
+    } else {
+        std::println("Unsupported AMS. Defaulting to round robin.");
+        ccAms = 0b0;
+    }
+
+    // Set CC.MPS
+    uint8_t ccMps{0};
+    std::println("MPSMax: {}\nMPSMin: {}", capMPSMax, capMPSMin);
+
+    // Set CC.CSS
+    uint8_t ccCss{0};
+
+    switch (capCss) {
+        case nvme::cap::css::NCSS:
+            ccCss = 0x0;
+            break;
+        case nvme::cap::css::IOCSS:
+            ccCss = 0b110;
+            break;
+        case nvme::cap::css::NOIOCSS:
+            ccCss = 0b111;
+            break;
+        default:
+            std::println("CAP CSS is not recognized.");
+            ccCss = 0x0;
+            break;
+    }
+
+    cc = nvme::cc::AMS::insert(cc, ccAms);
+    cc = nvme::cc::MPS::insert(cc, ccMps);
+    cc = nvme::cc::CSS::insert(cc, ccCss);
+
+    // Enable controller
+    cc = nvme::cc::EN::insert(cc, 0b1);
+    // TODO: Poll for CSTS.RDY to be 1?
+
+    // Create an I/O Queue
+    // 1) Initialize CC.IOCQES / CC.IOSQES
+
 
     //::ioctl(device_fd, VFIO_DEVICE_RESET);
 
