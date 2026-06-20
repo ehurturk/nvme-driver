@@ -1,3 +1,4 @@
+#include <cstring>
 #include <linux/vfio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -6,10 +7,13 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <assert.h>
 
 #include <print>
 #include <string_view>
 #include <format>
+
+#include "include/nvme_spec.hpp"
 
 namespace nvme
 {
@@ -132,28 +136,43 @@ int main()
         return EXIT_FAILURE;
     }
 
-    for (int i = 0; i < device_info.num_regions; i++) {
-        struct vfio_region_info reg{.argsz = sizeof(reg)};
-        reg.index = i;
-        if (::ioctl(device_fd, VFIO_DEVICE_GET_REGION_INFO, &reg)) {
-            std::println("Can't get device region info.");
-            close(container_fd);
-            close(group_fd);
-            close(device_fd);
-            return EXIT_FAILURE;
-        }
+    assert(device_info.num_regions >= 1 && "No BAR Region is implemented.");
 
-        if (reg.size == 0) {
-            std::println("[INFO]: Region index {} is unimplemented.", i);
-            continue;
-        }
+    // Map the BAR0 region
+    vfio_region_info bar0_region{.argsz = sizeof(bar0_region)};
+    bar0_region.index = VFIO_PCI_BAR0_REGION_INDEX;
 
-        if (reg.flags & VFIO_REGION_INFO_FLAG_MMAP) {
-            std::println("[INFO]: Region supports MMAP.");
-        }
-
-        std::println("Region size: {}\nOffset: {}", reg.size, reg.offset);
+    if (::ioctl(device_fd, VFIO_DEVICE_GET_REGION_INFO, &bar0_region)<0) {
+        std::println("Could not get BAR0 region info: {}", strerror(errno));
+        close(container_fd);
+        close(group_fd);
+        close(device_fd);
+        return EXIT_FAILURE;
     }
+
+    void *bar0 = ::mmap(nullptr, bar0_region.size, PROT_READ | PROT_WRITE,
+                      MAP_SHARED, device_fd, bar0_region.offset);
+
+    if (bar0 == MAP_FAILED) {
+        std::println("Could not mmap bar0 region to device: {}", strerror(errno));
+        close(container_fd);
+        close(group_fd);
+        close(device_fd);
+        return EXIT_FAILURE;
+    }
+
+    auto* controller_properties =
+        reinterpret_cast<volatile nvme::NvmeBar0 *>(bar0);
+
+    // Execute a volatile read into the memory mapped region to get
+    // the CAP value (8 bytes in size).
+    std::uint64_t cap = utils::MMIORead(controller_properties->cap);
+    // Extract MQES (maximum queue entry size) and Doorbell stride values
+    // from the CAP.
+    auto mqes = nvme::cap::Mqes::extract(cap);
+    auto dstr = nvme::cap::DStride::extract(cap);
+
+    std::println("MQES: {}\nDSTR: {}", mqes, dstr);
 
     //::ioctl(device_fd, VFIO_DEVICE_RESET);
 
