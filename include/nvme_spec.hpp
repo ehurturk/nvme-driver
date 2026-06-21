@@ -185,7 +185,7 @@ using CSS = utils::BitField<uint32_t, 4, 3>; // IO Command Set Selected
 using MPS = utils::BitField<uint32_t, 7, 4>; // Memory Page Size
 using AMS = utils::BitField<uint32_t, 11, 3>; // Arbitration Mechanism Selected
 using SHN = utils::BitField<uint32_t, 14, 2>; // Shutdown Notification
-using ISQES =
+using IOSQES =
         utils::BitField<uint32_t, 16, 4>; // IO Submission Queue Entry Size
 using IOCQES =
         utils::BitField<uint32_t, 20, 4>; // IO Completion Queue Entry Size

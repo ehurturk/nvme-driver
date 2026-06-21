@@ -96,25 +96,122 @@ int main()
         return EXIT_FAILURE;
     }
 
-    // Allocate some space and setup a DMA mapping
-    // TODO: is this needed now?
-    //vfio_iommu_type1_dma_map dma_map{.argsz = sizeof(dma_map)};
-    //constexpr size_t DMA_SIZE = 1024 * 1024;
-    //void *dma_region = ::mmap(nullptr, DMA_SIZE, PROT_READ | PROT_WRITE,
-    //                          MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+    // Retrieve valid IOVA address range
 
-    //if (dma_region == MAP_FAILED) {
-    //    std::println("DMA Mmap failed.");
-    //    return EXIT_FAILURE;
-    //}
+    // Allocate some space and setup a DMA mapping.
+    // This mmap'd and IOMMU-mapped region is the pool of
+    // host memory the controller can reach via DMA. This
+    // memory mapped region will eventually include:
+    //    - Queue memory (admin and I/O queues)
+    //    - Data buffers
+    //    - PRP Lists
+    vfio_iommu_type1_dma_map dma_map{.argsz = sizeof(dma_map)};
+    constexpr size_t DMA_SIZE = 1024 * 1024;
+    void *dma_region = ::mmap(nullptr, DMA_SIZE, PROT_READ | PROT_WRITE,
+            MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 
-    //dma_map.vaddr = static_cast<std::uint64_t>(
-    //    reinterpret_cast<std::uintptr_t>(dma_region));
-    //dma_map.size = DMA_SIZE;
-    //dma_map.iova = 0;
-    //dma_map.flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE;
+    if (dma_region == MAP_FAILED) {
+        std::println("DMA Mmap failed.");
+        return EXIT_FAILURE;
+    }
 
-    //::ioctl(container_fd, VFIO_IOMMU_MAP_DMA, &dma_map);
+    std::uintptr_t iova_base = reinterpret_cast<std::uintptr_t>(dma_region);
+    {
+        std::uintptr_t start_iova = iova_base;
+        std::uintptr_t end_iova = start_iova + DMA_SIZE - 1;
+
+        // check alignment of the dma mapped RAM buffer
+        if (start_iova % 4096 != 0 || DMA_SIZE % 4096 != 0) {
+            close(group_fd);
+            close(container_fd);
+            std::println("[ERROR]: Validation error: UVA or size is not 4KB "
+                         "page aligned.");
+            return EXIT_FAILURE;
+        }
+
+        vfio_iommu_type1_info *info =
+                static_cast<vfio_iommu_type1_info *>(malloc(iommu_info.argsz));
+        info->argsz = iommu_info.argsz;
+
+        if (::ioctl(container_fd, VFIO_IOMMU_GET_INFO, info) < 0) {
+            close(container_fd);
+            close(group_fd);
+            free(info);
+            std::println("Failed to get IOMMU info: {}", strerror(errno));
+            return EXIT_FAILURE;
+        }
+
+        if (info->flags & VFIO_IOMMU_INFO_CAPS) {
+            std::byte *raw_cap_addr =
+                    reinterpret_cast<std::byte *>(info) + info->cap_offset;
+            auto *header =
+                    std::start_lifetime_as<vfio_info_cap_header>(raw_cap_addr);
+
+            bool uva_fits_in_iova_ranges = false;
+
+            while (header != nullptr) {
+                if (header->id == VFIO_IOMMU_TYPE1_INFO_CAP_IOVA_RANGE) {
+                    // Then we can get the IOVA capability which allows us to
+                    // report the valid IOVA ranges so that our DMA IOVAs are
+                    // in the correct range.
+                    //
+                    // Note from linux/vfio.h:
+                    //    "Any DMA map attempt outside the valid iova range
+                    //     will return error."
+
+                    // No UB since vfio_iommu_type1_info_cap_iova_range is a
+                    // standard-layout, and header it share the same memory layout.
+                    auto *cap = reinterpret_cast<
+                            vfio_iommu_type1_info_cap_iova_range *>(header);
+
+                    for (int i = 0; i < cap->nr_iovas; i++) {
+                        std::uint64_t range_start = cap->iova_ranges[i].start;
+                        std::uint64_t range_end = cap->iova_ranges[i].end;
+
+                        if (start_iova >= range_start &&
+                                end_iova <= range_end) {
+                            // found the IOVA window, can set it
+                            uva_fits_in_iova_ranges = true;
+                        }
+                    }
+                    break;
+                }
+
+                if (header->next) {
+                    std::byte *next_addr =
+                            reinterpret_cast<std::byte *>(info) + header->next;
+                    header = std::start_lifetime_as<vfio_info_cap_header>(
+                            next_addr);
+                } else {
+                    header = nullptr;
+                }
+            }
+
+            if (!uva_fits_in_iova_ranges) {
+                std::println(
+                        "[INFO]: Could not find a valid IOVA range that fits "
+                        "the UVA. Setting DMA IOVA base address as 0x0.");
+                iova_base = 0x0;
+            }
+        }
+
+        free(info);
+    }
+
+    // TODO: Replace this memory region with a memory allocator + DMA
+    // mapper in the future.
+    dma_map.vaddr = static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(dma_region));
+    dma_map.size = DMA_SIZE;
+    dma_map.iova = iova_base; // TODO: change this in the future when allocator is implemented.
+    dma_map.flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE;
+
+    if (::ioctl(container_fd, VFIO_IOMMU_MAP_DMA, &dma_map) < 0) {
+        close(container_fd);
+        close(group_fd);
+        std::println("[ERROR]: IOMMU DMA Map failed: {}", strerror(errno));
+        return EXIT_FAILURE;
+    }
 
     int device_fd = ::ioctl(
             group_fd, VFIO_GROUP_GET_DEVICE_FD, nvme::NVME_PCI_ADDR.data());
@@ -187,7 +284,8 @@ int main()
     auto capTimeout = nvme::cap::TIMEOUT::extract(cap);
     auto timeout = capTimeout * 500ms; // in milliseconds
 
-    auto wait_for = [](std::predicate auto&& predicate, std::chrono::milliseconds timeout) -> bool {
+    auto wait_for = [](std::predicate auto &&predicate,
+                            std::chrono::milliseconds timeout) -> bool {
         auto deadline = std::chrono::steady_clock::now() + timeout;
 
         while (!predicate()) {
@@ -207,7 +305,8 @@ int main()
     utils::MMIOWrite(controller_properties->cc, cc);
 
     auto rdy_is = [&](unsigned want) -> bool {
-        return nvme::csts::RDY::extract(utils::MMIORead(controller_properties->csts)) == want;
+        return nvme::csts::RDY::extract(
+                       utils::MMIORead(controller_properties->csts)) == want;
     };
 
     // Wait for ready bit to be cleared to 0 after EN is set to 0
@@ -266,6 +365,14 @@ int main()
     cc = nvme::cc::MPS::insert(cc, ccMps);
     cc = nvme::cc::CSS::insert(cc, ccCss);
 
+    // Set CC.IOSQES / CC.IOCQES
+    // For creating the admin queues, I will set IOSQES/IOCQES to standard
+    // NVM Command Set values (64 and 16 bytes respectively), and after running
+    // Identify Controller command, I will adjust these to the correct required
+    // minimums to create the I/O queues.
+    cc = nvme::cc::IOCQES::insert(cc, 16);
+    cc = nvme::cc::IOSQES::insert(cc, 64);
+
     // Enable controller
     cc = nvme::cc::EN::insert(cc, 0b1);
 
@@ -282,11 +389,27 @@ int main()
 
     std::println("[INFO] Controller is enabled.");
 
-
     // Create an I/O Queue
     // 1) Initialize CC.IOCQES / CC.IOSQES
 
     //::ioctl(device_fd, VFIO_DEVICE_RESET);
+
+    // Disable the controller
+    cc = nvme::cc::EN::insert(cc, 0b0);
+
+    utils::MMIOWrite(controller_properties->cc, cc);
+
+    if (!wait_for([&] { return rdy_is(0); }, timeout)) {
+        std::println("[TIMEOUT]: Controller did not become disabled.");
+        close(device_fd);
+        close(group_fd);
+        close(container_fd);
+        return EXIT_FAILURE;
+    }
+
+    std::println("[INFO] Controller is disabled.");
+
+    //::ioctl(container_fd, VFIO_IOMMU_UNMAP_DMA, &dma_map);
 
     close(device_fd);
     close(group_fd);
