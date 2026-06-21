@@ -12,6 +12,8 @@
 #include <print>
 #include <string_view>
 #include <format>
+#include <chrono>
+#include <thread>
 
 #include "include/nvme_spec.hpp"
 
@@ -20,6 +22,8 @@ namespace nvme
 constexpr std::string_view NVME_PCI_ADDR{"0000:01:00.0"};
 constexpr int NVME_GROUP_ID = 6;
 } // namespace nvme
+
+using namespace std::chrono_literals;
 
 int main()
 {
@@ -142,7 +146,7 @@ int main()
     vfio_region_info bar0_region{.argsz = sizeof(bar0_region)};
     bar0_region.index = VFIO_PCI_BAR0_REGION_INDEX;
 
-    if (::ioctl(device_fd, VFIO_DEVICE_GET_REGION_INFO, &bar0_region)<0) {
+    if (::ioctl(device_fd, VFIO_DEVICE_GET_REGION_INFO, &bar0_region) < 0) {
         std::println("Could not get BAR0 region info: {}", strerror(errno));
         close(container_fd);
         close(group_fd);
@@ -151,40 +155,69 @@ int main()
     }
 
     void *bar0 = ::mmap(nullptr, bar0_region.size, PROT_READ | PROT_WRITE,
-                      MAP_SHARED, device_fd, bar0_region.offset);
+            MAP_SHARED, device_fd, bar0_region.offset);
 
     if (bar0 == MAP_FAILED) {
-        std::println("Could not mmap bar0 region to device: {}", strerror(errno));
+        std::println(
+                "Could not mmap bar0 region to device: {}", strerror(errno));
         close(container_fd);
         close(group_fd);
         close(device_fd);
         return EXIT_FAILURE;
     }
 
-    auto* controller_properties =
-        reinterpret_cast<volatile nvme::NvmeBar0 *>(bar0);
+    auto *controller_properties =
+            reinterpret_cast<volatile nvme::NvmeBar0 *>(bar0);
 
     // Execute a volatile read into the memory mapped region to get
     // the CAP value (8 bytes in size).
     std::uint64_t cap = utils::MMIORead(controller_properties->cap);
-    // Extract MQES (maximum queue entry size) and Doorbell stride values
-    // from the CAP.
-    auto mqes = nvme::cap::MQES::extract(cap);
-    auto dstr = nvme::cap::DSTR::extract(cap);
-
-    std::println("MQES: {}\nDSTR: {}", mqes, dstr);
 
     auto vs = utils::MMIORead(controller_properties->vs);
     auto minor = nvme::vs::MinorVersion::extract(vs);
     auto major = nvme::vs::MajorVersion::extract(vs);
 
-    std::println("{}.{}", major, minor);
+    std::println("[INFO] NVMe Version: {}.{}", major, minor);
 
     // Configure the Controller
 
     volatile std::uint32_t cc = utils::MMIORead(controller_properties->cc);
+    volatile std::uint32_t csts = utils::MMIORead(controller_properties->csts);
+
+    auto capTimeout = nvme::cap::TIMEOUT::extract(cap);
+    auto timeout = capTimeout * 500ms; // in milliseconds
+
+    auto wait_for = [](std::predicate auto&& predicate, std::chrono::milliseconds timeout) -> bool {
+        auto deadline = std::chrono::steady_clock::now() + timeout;
+
+        while (!predicate()) {
+            if (std::chrono::steady_clock::now() >= deadline) {
+                return false;
+            }
+
+            std::this_thread::sleep_for(1ms);
+        }
+
+        return true;
+    };
+
+    // First disable the controller, as AMS, MPS, and CSS has to be
+    // written while the controller is disabled (EN = 0)
     cc = nvme::cc::EN::insert(cc, 0b0);
-    // TODO: Poll for CSTS.RDY to be 0?
+    utils::MMIOWrite(controller_properties->cc, cc);
+
+    auto rdy_is = [&](unsigned want) -> bool {
+        return nvme::csts::RDY::extract(utils::MMIORead(controller_properties->csts)) == want;
+    };
+
+    // Wait for ready bit to be cleared to 0 after EN is set to 0
+    if (!wait_for([&] { return rdy_is(0); }, timeout)) {
+        std::println("[TIMEOUT]: Controller did not become disabled.");
+        close(device_fd);
+        close(group_fd);
+        close(container_fd);
+        return EXIT_FAILURE;
+    }
 
     auto capAms = nvme::cap::AMS::extract(cap);
     auto capMPSMax = nvme::cap::MPSMax::extract(cap);
@@ -192,10 +225,10 @@ int main()
     std::uint8_t capCss = nvme::cap::CSS::extract(cap);
 
     // Set CC.AMS
-    uint8_t ccAms {};
+    uint8_t ccAms{};
     if (capAms == 0) {
         std::println("AMS: Vendor specific.");
-        ccAms = 0b111;
+        ccAms = 0b0; // TODO: 0b111 or 0b0?
     } else if (capAms == 1) {
         std::println("AMS: WRRUPC");
         ccAms = 0b1;
@@ -208,23 +241,25 @@ int main()
     uint8_t ccMps{0};
     std::println("MPSMax: {}\nMPSMin: {}", capMPSMax, capMPSMin);
 
+    if (ccMps < capMPSMin || ccMps > capMPSMax) {
+        ccMps = capMPSMin;
+        std::println("[INFO]: ccMps {} is out of bounds, setting it as "
+                     "capMPSMin: {}",
+                ccMps, capMPSMin);
+    }
+
     // Set CC.CSS
     uint8_t ccCss{0};
 
-    switch (capCss) {
-        case nvme::cap::css::NCSS:
-            ccCss = 0x0;
-            break;
-        case nvme::cap::css::IOCSS:
-            ccCss = 0b110;
-            break;
-        case nvme::cap::css::NOIOCSS:
-            ccCss = 0b111;
-            break;
-        default:
-            std::println("CAP CSS is not recognized.");
-            ccCss = 0x0;
-            break;
+    if (capCss & nvme::cap::css::NCSS_BIT) {
+        std::println("NCSS Bit is present...");
+        ccCss = nvme::cc::css::NCSS;
+    } else {
+        std::println("NVME Command Set is not found.");
+        close(container_fd);
+        close(group_fd);
+        close(device_fd);
+        return EXIT_FAILURE;
     }
 
     cc = nvme::cc::AMS::insert(cc, ccAms);
@@ -233,11 +268,23 @@ int main()
 
     // Enable controller
     cc = nvme::cc::EN::insert(cc, 0b1);
-    // TODO: Poll for CSTS.RDY to be 1?
+
+    utils::MMIOWrite(controller_properties->cc, cc);
+
+    // Wait for the RDY bit to become 1 after EN is set to 1.
+    if (!wait_for([&] { return rdy_is(1); }, timeout)) {
+        std::println("[TIMEOUT]: Controller did not become enabled.");
+        close(device_fd);
+        close(group_fd);
+        close(container_fd);
+        return EXIT_FAILURE;
+    }
+
+    std::println("[INFO] Controller is enabled.");
+
 
     // Create an I/O Queue
     // 1) Initialize CC.IOCQES / CC.IOSQES
-
 
     //::ioctl(device_fd, VFIO_DEVICE_RESET);
 

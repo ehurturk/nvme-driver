@@ -159,9 +159,12 @@ using CMBS = utils::BitField<uint64_t, 57, 1>; // CMB Supported
 
 namespace css
 {
-constexpr uint8_t NCSS = 0b1;
-    constexpr uint8_t IOCSS = 0b01000000;
-constexpr uint8_t NOIOCSS = 0b10000000;
+// Mask the Command Sets Supported field with these
+// bitmasks
+//     e.g. capCss & NCSS_BIT | capCss & IOCSS_BIT
+constexpr uint8_t NCSS_BIT = 0x1;
+constexpr uint8_t IOCSS_BIT = 0x1 << 6;
+constexpr uint8_t NOIOCSS_BIT = 0x1 << 7;
 } // namespace css
 
 } // namespace cap
@@ -186,7 +189,18 @@ using ISQES =
         utils::BitField<uint32_t, 16, 4>; // IO Submission Queue Entry Size
 using IOCQES =
         utils::BitField<uint32_t, 20, 4>; // IO Completion Queue Entry Size
+namespace css
+{
+constexpr uint8_t NCSS = 0b000;
+constexpr uint8_t IOCSS = 0b110;
+constexpr uint8_t NOIOCSS = 0b111;
+} // namespace css
 } // namespace cc
+
+namespace csts
+{
+using RDY = utils::BitField<uint32_t, 0, 1>; // Ready
+}
 
 namespace command
 {
