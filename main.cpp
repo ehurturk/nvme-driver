@@ -17,30 +17,30 @@
 #include <version>
 #include <concepts>
 
+#include "include/admin_queue.hpp"
 #include "include/nvme_spec.hpp"
 
+// compat layer for type punning
 namespace compat
 {
-template <class T>
-[[nodiscard]] T* load_object_from_bytes(void *src) noexcept;
+template <class T> [[nodiscard]] T *load_object_from_bytes(void *src) noexcept;
 
 #if defined(__cpp_lib_start_lifetime_as) // C++23 & start_lifetime_as is defined
-template <class T>
-[[nodiscard]] T *load_object_from_bytes(void *src) noexcept
+template <class T> [[nodiscard]] T *load_object_from_bytes(void *src) noexcept
 {
     std::byte *raw_addr = reinterpret_cast<std::byte *>(src);
     return std::start_lifetime_as<T>(raw_addr);
 }
 #elif __cplusplus >= 202002L // C++20
-template <class T> requires(std::is_trivially_copyable_v<T>)
+template <class T>
+    requires(std::is_trivially_copyable_v<T>)
 [[nodiscard]] T *load_object_from_bytes(void *src) noexcept
 {
-    return std::launder(static_cast<T*>(std::memmove(src, src, sizeof(T))));
+    return std::launder(static_cast<T *>(std::memmove(src, src, sizeof(T))));
 }
 #else
 #error "Need at least C++20"
 #endif
-
 } // namespace compat
 
 namespace nvme
@@ -170,7 +170,8 @@ int main()
         if (info->flags & VFIO_IOMMU_INFO_CAPS) {
             std::byte *raw_cap_addr =
                     reinterpret_cast<std::byte *>(info) + info->cap_offset;
-            auto* header = compat::load_object_from_bytes<vfio_info_cap_header>(raw_cap_addr);
+            auto *header = compat::load_object_from_bytes<vfio_info_cap_header>(
+                    raw_cap_addr);
             bool uva_fits_in_iova_ranges = false;
 
             while (header != nullptr) {
@@ -196,7 +197,7 @@ int main()
                                 end_iova <= range_end) {
                             // found the IOVA window, can set it
                             std::println("Found IOVA range: {} - {}. UVA is {}",
-                                         range_start, range_end, iova_base);
+                                    range_start, range_end, iova_base);
                             uva_fits_in_iova_ranges = true;
                         }
                     }
@@ -206,7 +207,8 @@ int main()
                 if (header->next) {
                     std::byte *next_addr =
                             reinterpret_cast<std::byte *>(info) + header->next;
-                    header = compat::load_object_from_bytes<vfio_info_cap_header>(next_addr);
+                    header = compat::load_object_from_bytes<
+                            vfio_info_cap_header>(next_addr);
                 } else {
                     header = nullptr;
                 }
@@ -308,6 +310,8 @@ int main()
     volatile std::uint32_t csts = utils::MMIORead(controller_properties->csts);
 
     auto capTimeout = nvme::cap::TIMEOUT::extract(cap);
+    assert(capTimeout <= 0xFF && "Maximum timeout value is 0xFF.");
+
     auto timeout = capTimeout * 500ms; // in milliseconds
 
     auto wait_for = [](std::predicate auto &&predicate,
@@ -387,6 +391,7 @@ int main()
         return EXIT_FAILURE;
     }
 
+    // Insert AS, MPS, CSS into CC
     cc = nvme::cc::AMS::insert(cc, ccAms);
     cc = nvme::cc::MPS::insert(cc, ccMps);
     cc = nvme::cc::CSS::insert(cc, ccCss);
@@ -396,8 +401,27 @@ int main()
     // NVM Command Set values (64 and 16 bytes respectively), and after running
     // Identify Controller command, I will adjust these to the correct required
     // minimums to create the I/O queues.
-    cc = nvme::cc::IOCQES::insert(cc, 16);
-    cc = nvme::cc::IOSQES::insert(cc, 64);
+    cc = nvme::cc::IOSQES::insert(cc, nvme::constants::IO_SQES);
+    cc = nvme::cc::IOCQES::insert(cc, nvme::constants::IO_CQES);
+
+    // Setup AQA & ASQ & ACQ
+
+    volatile uint32_t aqa = utils::MMIORead(controller_properties->aqa);
+    aqa = nvme::aqa::ASQS::insert(aqa, nvme::constants::AQ_DEPTH);
+    aqa = nvme::aqa::ACQS::insert(aqa, nvme::constants::AQ_DEPTH);
+
+    // TODO: Populate adminQueue queues with IOVA and UVA.
+    nvme::AdminQueue adminQueue{};
+
+    volatile uint64_t asq = utils::MMIORead(controller_properties->asq);
+    std::uint64_t asqb = adminQueue.qp_.submission_queues_.front().mem_info_.iova.value;
+    assert(asqb % (1 << ccMps) == 0 && "ASQB shall be memory page aligned (based on the value in CC.MPS)");
+    asq = nvme::asq::ASQB::insert(asq, asqb);
+
+    volatile uint64_t acq = utils::MMIORead(controller_properties->acq);
+    std::uint64_t acqb = adminQueue.qp_.completion_queue_.mem_info_.iova.value;
+    assert(acqb % (1 << ccMps) == 0 && "ACQB shall be memory page aligned (based on the value in CC.MPS)");
+    acq = nvme::acq::ACQB::insert(acq, acqb);
 
     // Enable controller
     cc = nvme::cc::EN::insert(cc, 0b1);
@@ -444,8 +468,14 @@ int main()
     return EXIT_SUCCESS;
 }
 
+
 // TODO:
-//   - what are device regions?
-//   - mmap size? iova? why do we mmap?
-//   - iommu_type1 vs cdev
-//   - irqs?
+// 1) Create admin queues (SQ, CQ) in host memory
+// 2) Rethink about buffer allocaion & DMA'ing it.
+//     - separate buffers for SQ, CQ?
+// 3) IOVA calculations, and IOVA <-> UVA translations
+//    for the ASQB and ACQB values.
+// 4) Make lifetime management more obvious (make
+//    the compat layer a bit nicer and tidier)
+// 5) Organize shit. Don't overcomplicate things, but
+//    be aware of the performance implications.

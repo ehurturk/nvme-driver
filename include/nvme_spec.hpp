@@ -111,8 +111,25 @@ enum class TransportType : uint8_t {
     NVME_TRTYPE_TCP = 3 // TCP
 };
 
-// Linux uses 32 as admin queue depth, so i went with it
-constexpr static int AQ_DEPTH = 32;
+namespace constants
+{
+// Some of the constants here are taken from linux:
+// include/linux/nvme.h
+
+// 0s based
+constexpr static size_t AQ_DEPTH = 31;
+static_assert(AQ_DEPTH < 4096 && AQ_DEPTH >= 0);
+
+// For the queue entry size constants,
+// the NVMe spec mandates that "the value
+// is in bytes and is specified as a power of
+// two (2^n)."
+constexpr static size_t ADM_SQES = 6;
+constexpr static size_t ADM_CQES = 4;
+
+constexpr static size_t IO_SQES = 6;
+constexpr static size_t IO_CQES = 4;
+} // namespace constants
 
 struct alignas(4096) NvmeBar0 {
     volatile uint64_t cap; // 0x0000 Controller Capabilities
@@ -200,6 +217,22 @@ constexpr uint8_t NOIOCSS = 0b111;
 namespace csts
 {
 using RDY = utils::BitField<uint32_t, 0, 1>; // Ready
+}
+
+namespace aqa
+{
+using ASQS = utils::BitField<uint32_t, 0, 12>;
+using ACQS = utils::BitField<uint32_t, 16, 12>;
+} // namespace aqa
+
+namespace asq
+{
+using ASQB = utils::BitField<uint64_t, 12, 52>;
+}
+
+namespace acq
+{
+using ACQB = utils::BitField<uint64_t, 12, 52>;
 }
 
 namespace command
