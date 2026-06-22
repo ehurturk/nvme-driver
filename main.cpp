@@ -14,8 +14,34 @@
 #include <format>
 #include <chrono>
 #include <thread>
+#include <version>
+#include <concepts>
 
 #include "include/nvme_spec.hpp"
+
+namespace compat
+{
+template <class T>
+[[nodiscard]] T* load_object_from_bytes(void *src) noexcept;
+
+#if defined(__cpp_lib_start_lifetime_as) // C++23 & start_lifetime_as is defined
+template <class T>
+[[nodiscard]] T *load_object_from_bytes(void *src) noexcept
+{
+    std::byte *raw_addr = reinterpret_cast<std::byte *>(src);
+    return std::start_lifetime_as<T>(raw_addr);
+}
+#elif __cplusplus >= 202002L // C++20
+template <class T> requires(std::is_trivially_copyable_v<T>)
+[[nodiscard]] T *load_object_from_bytes(void *src) noexcept
+{
+    return std::launder(static_cast<T*>(std::memmove(src, src, sizeof(T))));
+}
+#else
+#error "Need at least C++20"
+#endif
+
+} // namespace compat
 
 namespace nvme
 {
@@ -144,9 +170,7 @@ int main()
         if (info->flags & VFIO_IOMMU_INFO_CAPS) {
             std::byte *raw_cap_addr =
                     reinterpret_cast<std::byte *>(info) + info->cap_offset;
-            auto *header =
-                    std::start_lifetime_as<vfio_info_cap_header>(raw_cap_addr);
-
+            auto* header = compat::load_object_from_bytes<vfio_info_cap_header>(raw_cap_addr);
             bool uva_fits_in_iova_ranges = false;
 
             while (header != nullptr) {
@@ -171,6 +195,8 @@ int main()
                         if (start_iova >= range_start &&
                                 end_iova <= range_end) {
                             // found the IOVA window, can set it
+                            std::println("Found IOVA range: {} - {}. UVA is {}",
+                                         range_start, range_end, iova_base);
                             uva_fits_in_iova_ranges = true;
                         }
                     }
@@ -180,8 +206,7 @@ int main()
                 if (header->next) {
                     std::byte *next_addr =
                             reinterpret_cast<std::byte *>(info) + header->next;
-                    header = std::start_lifetime_as<vfio_info_cap_header>(
-                            next_addr);
+                    header = compat::load_object_from_bytes<vfio_info_cap_header>(next_addr);
                 } else {
                     header = nullptr;
                 }
@@ -203,7 +228,8 @@ int main()
     dma_map.vaddr = static_cast<std::uint64_t>(
             reinterpret_cast<std::uintptr_t>(dma_region));
     dma_map.size = DMA_SIZE;
-    dma_map.iova = iova_base; // TODO: change this in the future when allocator is implemented.
+    dma_map.iova =
+            iova_base; // TODO: change this in the future when allocator is implemented.
     dma_map.flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE;
 
     if (::ioctl(container_fd, VFIO_IOMMU_MAP_DMA, &dma_map) < 0) {
