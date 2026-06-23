@@ -134,7 +134,7 @@ int main()
     vfio_iommu_type1_dma_map dma_map{.argsz = sizeof(dma_map)};
     constexpr size_t DMA_SIZE = 1024 * 1024;
     void *dma_region = ::mmap(nullptr, DMA_SIZE, PROT_READ | PROT_WRITE,
-            MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+            MAP_SHARED | MAP_ANONYMOUS, 0, 0); // TODO: MAP_SHARED or MAP_PRIVATE?
 
     if (dma_region == MAP_FAILED) {
         std::println("DMA Mmap failed.");

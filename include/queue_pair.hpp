@@ -2,20 +2,14 @@
 
 #include <array>
 #include <vector>
-#include <cstdint>
 
+#include "dma_ring.hpp"
 #include "traits.hpp"
 
 namespace nvme
 {
 
-using IOVA = std::uint64_t;
 
-struct DMAMemory {
-    std::byte *uva; // userspace virtual addr
-    IOVA iova;      // device virtual addr
-    std::size_t size;
-};
 
 // CRTP-based dispatch on for Admin/IO
 // queues. This is a fixed-size ring queue
@@ -63,7 +57,8 @@ class Queue
 // NOTE: "Typical NVMe implementation attempts to allocate
 //        a maximum of 1 queue pair per host CPU core."
 template <class T> struct QueuePair {
-    std::vector<Queue<T, typename QueueTraits<T>::SubmissionEntry>> submission_queues_;
+    std::vector<Queue<T, typename QueueTraits<T>::SubmissionEntry>>
+            submission_queues_;
     Queue<T, typename QueueTraits<T>::CompletionEntry> completion_queue_;
 };
 

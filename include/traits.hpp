@@ -7,23 +7,27 @@ namespace nvme
     struct AdminQueue;
     struct IOQueue;
 
+    struct AdminQueueKind {};
+
+    struct IOQueueKind {};
+
     struct AdminSubmissionEntry;
     struct AdminCompletionEntry;
 
     struct IOSubmissionEntry;
     struct IOCompletionEntry;
 
-    template <class Derived> struct QueueTraits;
+    template <class Kind> struct QueueTraits;
 
-    template <> struct QueueTraits<AdminQueue> {
+    template <> struct QueueTraits<AdminQueueKind> {
         using SubmissionEntry = AdminSubmissionEntry;
         using CompletionEntry = AdminCompletionEntry;
-        static constexpr std::size_t value = constants::AQ_DEPTH;
+        static constexpr std::size_t depth = constants::AQ_DEPTH;
     };
 
-    template <> struct QueueTraits<IOQueue> {
+    template <> struct QueueTraits<IOQueueKind> {
         using SubmissionEntry = IOSubmissionEntry;
         using CompletionEntry = IOCompletionEntry;
-        static constexpr std::size_t value = constants::IO_DEPTH;
+        static constexpr std::size_t depth = constants::IO_DEPTH;
     };
 }
