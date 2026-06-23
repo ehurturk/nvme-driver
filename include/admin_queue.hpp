@@ -5,15 +5,18 @@
 namespace nvme
 {
 
-struct AdminSubmissionQueue : public SubmissionQueue<AdminSubmissionQueue> {
-    void submit_impl();
+struct AdminSubmissionEntry {
 };
 
-using AdminQueuePair = QueuePair<AdminSubmissionQueue>;
-
-struct AdminQueue
-{
-    AdminQueuePair qp_;
+struct AdminCompletionEntry {
 };
+
+struct AdminQueue : public Queue<AdminQueue> {
+    void submit_impl()
+    {
+    }
+};
+
+using AdminQueuePair = QueuePair<AdminQueue>;
 
 } // namespace nvme

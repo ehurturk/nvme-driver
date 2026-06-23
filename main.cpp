@@ -411,15 +411,15 @@ int main()
     aqa = nvme::aqa::ACQS::insert(aqa, nvme::constants::AQ_DEPTH);
 
     // TODO: Populate adminQueue queues with IOVA and UVA.
-    nvme::AdminQueue adminQueue{};
+    nvme::AdminQueuePair adminPair{};
 
     volatile uint64_t asq = utils::MMIORead(controller_properties->asq);
-    std::uint64_t asqb = adminQueue.qp_.submission_queues_.front().mem_info_.iova.value;
+    std::uint64_t asqb = adminPair.submission_queues_.front().mem_.iova;
     assert(asqb % (1 << ccMps) == 0 && "ASQB shall be memory page aligned (based on the value in CC.MPS)");
     asq = nvme::asq::ASQB::insert(asq, asqb);
 
     volatile uint64_t acq = utils::MMIORead(controller_properties->acq);
-    std::uint64_t acqb = adminQueue.qp_.completion_queue_.mem_info_.iova.value;
+    std::uint64_t acqb = adminPair.completion_queue_.mem_.iova;
     assert(acqb % (1 << ccMps) == 0 && "ACQB shall be memory page aligned (based on the value in CC.MPS)");
     acq = nvme::acq::ACQB::insert(acq, acqb);
 
@@ -470,6 +470,12 @@ int main()
 
 
 // TODO:
+// 1) Implement ring buffer in Queue with read/write heads.
+// 2) Implement necessary functions in QueuePair: it is the main structure.
+//        - think about what is the main differentiation of admin and IO queues, is it
+//          simple enough to be abstracted away with AdminQueue / IO Queue both extending
+//          the Queue class via CRTP?
+// 3)
 // 1) Create admin queues (SQ, CQ) in host memory
 // 2) Rethink about buffer allocaion & DMA'ing it.
 //     - separate buffers for SQ, CQ?

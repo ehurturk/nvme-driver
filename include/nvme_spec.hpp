@@ -120,6 +120,8 @@ namespace constants
 constexpr static size_t AQ_DEPTH = 31;
 static_assert(AQ_DEPTH < 4096 && AQ_DEPTH >= 0);
 
+constexpr static size_t IO_DEPTH = 1023;
+
 // For the queue entry size constants,
 // the NVMe spec mandates that "the value
 // is in bytes and is specified as a power of
