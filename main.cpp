@@ -19,29 +19,7 @@
 
 #include "include/admin_queue.hpp"
 #include "include/nvme_spec.hpp"
-
-// compat layer for type punning
-namespace compat
-{
-template <class T> [[nodiscard]] T *load_object_from_bytes(void *src) noexcept;
-
-#if defined(__cpp_lib_start_lifetime_as) // C++23 & start_lifetime_as is defined
-template <class T> [[nodiscard]] T *load_object_from_bytes(void *src) noexcept
-{
-    std::byte *raw_addr = reinterpret_cast<std::byte *>(src);
-    return std::start_lifetime_as<T>(raw_addr);
-}
-#elif __cplusplus >= 202002L // C++20
-template <class T>
-    requires(std::is_trivially_copyable_v<T>)
-[[nodiscard]] T *load_object_from_bytes(void *src) noexcept
-{
-    return std::launder(static_cast<T *>(std::memmove(src, src, sizeof(T))));
-}
-#else
-#error "Need at least C++20"
-#endif
-} // namespace compat
+#include "include/lifetime.hpp"
 
 namespace nvme
 {
@@ -131,10 +109,12 @@ int main()
     //    - Queue memory (admin and I/O queues)
     //    - Data buffers
     //    - PRP Lists
+    // Use a MAP_PRIVATE mmap flag to tell kernel and VFIO to pin
+    // the pages in physical memory.
     vfio_iommu_type1_dma_map dma_map{.argsz = sizeof(dma_map)};
     constexpr size_t DMA_SIZE = 1024 * 1024;
     void *dma_region = ::mmap(nullptr, DMA_SIZE, PROT_READ | PROT_WRITE,
-            MAP_SHARED | MAP_ANONYMOUS, 0, 0); // TODO: MAP_SHARED or MAP_PRIVATE?
+            MAP_PRIVATE | MAP_ANONYMOUS, 0, 0); // TODO: MAP_SHARED or MAP_PRIVATE?
 
     if (dma_region == MAP_FAILED) {
         std::println("DMA Mmap failed.");

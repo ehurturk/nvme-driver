@@ -18,17 +18,19 @@
   ASQ          28h - 2Fh
   ACQ          30h - 3Bh
 
+  clang-format off
   ASQ0 Tail Doorbell  1000h                          - 1003h
-  ACQ0 Head Doorbell  1000h + (1 * (4 << CAP.DSTRD)) - 1003h + (1 * 4 <<
-CAP.DSTRD) SQ1 Tail Doorbell   1000h + (2 * (4 << CAP.DSTRD)) - 1003h + (2 * 4
-<< CAP.DSTRD) CQ1 Tail Doorbell   1000h + (3 * (4 << CAP.DSTRD)) - 1003h + (3 *
-4 << CAP.DSTRD) SQ2 Tail Doorbell   1000h + (4 * (4 << CAP.DSTRD)) - 1003h + (4
-* 4 << CAP.DSTRD) CQ2 Tail Doorbell   1000h + (5 * (4 << CAP.DSTRD)) - 1003h +
-(5 * 4 << CAP.DSTRD)
+  ACQ0 Head Doorbell  1000h + (1 * (4 << CAP.DSTRD)) - 1003h + (1 * 4 << CAP.DSTRD)
 
-  SQyTDBL             1000h + (2y * (4 << CAP.DSTRD)) - 1003h + (2y * (4 <<
-CAP.DSTRD)) CQyHDBL             1000h + ((2y+1) * (4 << CAP.DSTRD)) - 1003h +
-((2y+1) * (4 << CAP.DSTRD))
+  SQ1 Tail Doorbell   1000h + (2 * (4 << CAP.DSTRD)) - 1003h + (2 * 4 << CAP.DSTRD)
+  CQ1 Tail Doorbell   1000h + (3 * (4 << CAP.DSTRD)) - 1003h + (3 * 4 << CAP.DSTRD)
+
+  SQ2 Tail Doorbell   1000h + (4 * (4 << CAP.DSTRD)) - 1003h + (4 * 4 << CAP.DSTRD)
+  CQ2 Tail Doorbell   1000h + (5 * (4 << CAP.DSTRD)) - 1003h + (5 * 4 << CAP.DSTRD)
+
+  SQyTDBL             1000h + (2y * (4 << CAP.DSTRD)) - 1003h + (2y * (4 << CAP.DSTRD))
+  CQyHDBL             1000h + ((2y+1) * (4 << CAP.DSTRD)) - 1003h + ((2y+1) * (4 << CAP.DSTRD))
+  clang-format on
 
   Controller Capabilities:
    - Doorbell Stride (DSTRD): CAP[35:32]
