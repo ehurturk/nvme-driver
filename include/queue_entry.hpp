@@ -8,66 +8,26 @@ namespace nvme
 
 using DWRD = std::uint32_t;
 
-namespace sqe
-{
-namespace cdw0
+namespace sqe::cdw0
 {
 using OPC = utils::BitField<DWRD, 0, 8>;
 using FUSE = utils::BitField<DWRD, 8, 2>;
 using PSDT = utils::BitField<DWRD, 14, 2>;
 using CID = utils::BitField<DWRD, 16, 16>;
-} // namespace cdw0
+} // namespace sqe::cdw0
 
-struct CDW0 {
-    DWRD raw{};
+namespace cqe::cdw2
+{
+using SQHP = utils::BitField<DWRD, 0, 16>;
+using SQID = utils::BitField<DWRD, 16, 16>;
+} // namespace cqe::cdw2
 
-    void set_opcode(std::uint8_t opc)
-    {
-        raw = cdw0::OPC::insert(raw, opc);
-    }
-
-    void set_cid(std::uint16_t cid)
-    {
-        raw = cdw0::CID::insert(raw, cid);
-    }
-
-    void set_psdt(std::uint8_t psdt)
-    {
-        raw = cdw0::PSDT::insert(raw, psdt);
-    }
-
-    void set_fuse(std::uint8_t fuse)
-    {
-        raw = cdw0::FUSE::insert(raw, fuse);
-    }
-
-    std::uint8_t opcode()
-    {
-        return cdw0::OPC::extract(raw);
-    }
-
-    std::uint16_t cid()
-    {
-        return cdw0::CID::extract(raw);
-    }
-
-    std::uint8_t psdt()
-    {
-        return cdw0::PSDT::extract(raw);
-    }
-
-    std::uint8_t fuse()
-    {
-        return cdw0::FUSE::extract(raw);
-    }
-
-    DWRD value() const
-    {
-        return raw;
-    }
-};
-
-} // namespace sqe
+namespace cqe::cdw3
+{
+using CID = utils::BitField<DWRD, 0, 16>;
+using P = utils::BitField<DWRD, 16, 1>;
+using STATUS = utils::BitField<DWRD, 17, 15>;
+} // namespace cqe::cdw3
 
 struct DataPointer {
     std::uint64_t prp1;
@@ -75,8 +35,8 @@ struct DataPointer {
 };
 
 struct CommonCommand {
-    sqe::CDW0 cdw0;
-    std::uint32_t nsid;
+    DWRD cdw0;
+    DWRD nsid;
     DWRD cdw2;
     DWRD cdw3;
     std::uint64_t mptr;
@@ -89,97 +49,68 @@ struct CommonCommand {
     DWRD cdw15;
 };
 
-namespace cqe
-{
-namespace cdw2
-{
-using SQHP = utils::BitField<DWRD, 0, 16>;
-using SQID = utils::BitField<DWRD, 16, 16>;
-} // namespace cdw2
-
-namespace cdw3
-{
-using CID = utils::BitField<DWRD, 0, 16>;
-using P = utils::BitField<DWRD, 16, 1>;
-using STATUS = utils::BitField<DWRD, 17, 15>;
-} // namespace cdw3
-
-struct CDW2 {
-    DWRD raw{};
-
-    void set_sqhp(std::uint16_t sqhp)
-    {
-        raw = cdw2::SQHP::insert(raw, sqhp);
-    }
-
-    void set_cid(std::uint16_t sqid)
-    {
-        raw = cdw2::SQID::insert(raw, sqid);
-    }
-
-    std::uint16_t sqhp()
-    {
-        return cdw2::SQHP::extract(raw);
-    }
-
-    std::uint16_t cid()
-    {
-        return cdw2::SQID::extract(raw);
-    }
-
-    DWRD value() const
-    {
-        return raw;
-    }
-};
-
-struct CDW3 {
-    DWRD raw{};
-
-    void set_cid(std::uint16_t cid)
-    {
-        raw = cdw3::CID::insert(raw, cid);
-    }
-
-    void set_phase(std::uint8_t p)
-    {
-        raw = cdw3::P::insert(raw, p);
-    }
-
-    void set_status(std::uint16_t status)
-    {
-        raw = cdw3::STATUS::insert(raw, status);
-    }
-
-    std::uint16_t cid()
-    {
-        return cdw3::CID::extract(raw);
-    }
-
-    std::uint8_t phase()
-    {
-        return cdw3::P::extract(raw);
-    }
-
-    std::uint16_t status()
-    {
-        return cdw3::STATUS::extract(raw);
-    }
-
-    DWRD value() const
-    {
-        return raw;
-    }
-};
-
-} // namespace cqe
-
 struct CompletionEntry {
     DWRD cdw0;
     DWRD cdw1;
-    cqe::CDW2 cdw2;
-    cqe::CDW3 cdw3;
+    DWRD cdw2; // sqhd + sqid
+    DWRD cdw3; // cid + status + phase
 };
+
+namespace sqe
+{
+// build CDW0 from named fields
+inline DWRD make_cdw0(std::uint8_t opc, std::uint16_t cid,
+        std::uint8_t fuse = 0, std::uint8_t psdt = 0)
+{
+    DWRD d = 0;
+    d = cdw0::OPC::insert(d, opc);
+    d = cdw0::FUSE::insert(d, fuse);
+    d = cdw0::PSDT::insert(d, psdt);
+    d = cdw0::CID::insert(d, cid);
+    return d;
+}
+
+inline std::uint8_t opcode(const CommonCommand &c)
+{
+    return cdw0::OPC::extract(c.cdw0);
+}
+inline std::uint16_t cid(const CommonCommand &c)
+{
+    return cdw0::CID::extract(c.cdw0);
+}
+inline std::uint8_t psdt(const CommonCommand &c)
+{
+    return cdw0::PSDT::extract(c.cdw0);
+}
+inline std::uint8_t fuse(const CommonCommand &c)
+{
+    return cdw0::FUSE::extract(c.cdw0);
+}
+
+} // namespace sqe
+
+namespace cqe
+{
+inline std::uint16_t cid(const CompletionEntry &c)
+{
+    return cdw3::CID::extract(c.cdw3);
+}
+
+inline std::uint8_t phase(const CompletionEntry &c)
+{
+    return cdw3::P::extract(c.cdw3);
+}
+
+inline std::uint16_t status(const CompletionEntry &c)
+{
+    return cdw3::STATUS::extract(c.cdw3);
+}
+
+inline std::uint16_t sqhd(const CompletionEntry &c)
+{
+    return cdw2::SQHP::extract(c.cdw2);
+}
+} // namespace cqe
 
 // check props
 static_assert(sizeof(DWRD) == 4);

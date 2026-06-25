@@ -6,7 +6,7 @@
 #include <cstring>
 
 #include "traits.hpp"
-#include "mapped_dma_buffer.hpp"
+#include "dma_memory.hpp"
 
 namespace nvme
 {
@@ -31,7 +31,7 @@ class SubmissionQueue
     static_assert(depth <= 65536);
 
     explicit SubmissionQueue(
-            MappedDmaBuffer dma_region, QueueHardwareContext context)
+            DmaMemory dma_region, QueueHardwareContext context)
             : dma_region_{std::move(dma_region)}, queue_id_{context.queue_id},
               doorbell_{context.sq_tail_dbell}
     {
@@ -107,7 +107,7 @@ class SubmissionQueue
     }
 
   private:
-    MappedDmaBuffer dma_region_;
+    DmaMemory dma_region_;
     std::uint16_t queue_id_;
     volatile std::uint32_t *doorbell_;
     std::size_t tail_{};

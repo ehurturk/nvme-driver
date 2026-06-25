@@ -112,3 +112,168 @@ Some important opcodes:
 | 0x02   | Get Log Page
 | 0x04   | Delete I/O Completion Queue
 | 0x05   | Create I/O Completion Queue
+
+
+## How Does SPDK Represent Commands & Queue Entries?
+
+The *Common Command Format* is represented as:
+
+```c
+struct spdk_nvme_cmd {
+	/* dword 0 */
+	uint16_t opc	:  8;	/* opcode */
+	uint16_t fuse	:  2;	/* fused operation */
+	uint16_t rsvd1	:  4;
+	uint16_t psdt	:  2;
+	uint16_t cid;		/* command identifier */
+
+	/* dword 1 */
+	uint32_t nsid;		/* namespace identifier */
+
+	/* dword 2-3: command-specific (reserved by base spec) */
+	uint32_t cdw2;
+	uint32_t cdw3;
+
+	/* dword 4-5 */
+	uint64_t mptr;		/* metadata pointer */
+
+	/* dword 6-9: data pointer */
+	union {
+		struct {
+			uint64_t prp1;		/* prp entry 1 */
+			uint64_t prp2;		/* prp entry 2 */
+		} prp;
+
+		struct spdk_nvme_sgl_descriptor sgl1;
+	} dptr;
+
+	/* command-specific */
+	union {
+		uint32_t cdw10;
+		union spdk_nvme_cmd_cdw10 cdw10_bits;
+	};
+	/* command-specific */
+	union {
+		uint32_t cdw11;
+		union spdk_nvme_cmd_cdw11 cdw11_bits;
+	};
+	/* command-specific */
+	union {
+		uint32_t cdw12;
+		union spdk_nvme_cmd_cdw12 cdw12_bits;
+	};
+	/* command-specific */
+	union {
+		uint32_t cdw13;
+		union spdk_nvme_cmd_cdw13 cdw13_bits;
+	};
+	/* dword 14-15 */
+	uint32_t cdw14;		/* command-specific */
+	uint32_t cdw15;		/* command-specific */
+};
+SPDK_STATIC_ASSERT(sizeof(struct spdk_nvme_cmd) == 64, "Incorrect size");
+```
+
+As can be seen from the layout of the struct, it is consisting of DWORD0 (opcode, fuse, psdt, cid), DWORD1 (nsid), DWORDs 2-3 (command-specific), DWORDS 4-5 for mptr, DWORDS 6-9 for the data pointer (either a prp entry struct or a scatter gather list descriptor). 
+
+The rest of the struct has command-specific DWRDs, specifically CDW10 to CDW15. 
+
+If we look closely at one of these DWRDs, say CDW10:
+
+```c
+/* command-specific */
+union {
+    uint32_t cdw10;
+    union spdk_nvme_cmd_cdw10 cdw10_bits;
+};
+```
+
+we can see that it is a 32-bit command descriptor. Since it is command-specific, it is represented
+as a union. In the case of CDW10, it is represented as
+
+```c
+union spdk_nvme_cmd_cdw10 {
+	uint32_t raw;
+	struct {
+		/* Controller or Namespace Structure */
+		uint32_t cns       : 8;
+		uint32_t reserved  : 8;
+		/* Controller Identifier */
+		uint32_t cntid     : 16;
+	} identify;
+
+	struct {
+		/* Log Page Identifier */
+		uint32_t lid       : 8;
+		/* Log Specific Field */
+		uint32_t lsp       : 7;
+		/* Retain Asynchronous Event */
+		uint32_t rae       : 1;
+		/* Number of Dwords Lower */
+		uint32_t numdl     : 16;
+	} get_log_page;
+
+	struct {
+		/* Submission Queue Identifier */
+		uint32_t sqid      : 16;
+		/* Command Identifier */
+		uint32_t cid       : 16;
+	} abort;
+
+	struct {
+		/* NVMe Security Specific Field */
+		uint32_t nssf      : 8;
+		/* SP Specific 0 */
+		uint32_t spsp0     : 8;
+		/* SP Specific 1 */
+		uint32_t spsp1     : 8;
+		/* Security Protocol */
+		uint32_t secp      : 8;
+	} sec_send_recv;
+
+	struct {
+		/* Queue Identifier */
+		uint32_t qid       : 16;
+		/* Queue Size */
+		uint32_t qsize     : 16;
+	} create_io_q;
+
+	struct {
+		/* Queue Identifier */
+		uint32_t qid       : 16;
+		uint32_t reserved  : 16;
+	} delete_io_q;
+    
+    // more commands...
+};
+SPDK_STATIC_ASSERT(sizeof(union spdk_nvme_cmd_cdw10) == 4, "Incorrect size");
+```
+
+Since this is a C-based API, it is represented as a union of admin commands where each command is a struct with bit-field members that are making up a 32-bit integer.
+
+
+A Completion Queue Entry is represented as:
+```c
+/**
+ * Completion queue entry
+ */
+struct spdk_nvme_cpl {
+	/* dword 0 */
+	uint32_t		cdw0;	/* command-specific */
+
+	/* dword 1 */
+	uint32_t		cdw1;	/* command-specific */
+
+	/* dword 2 */
+	uint16_t		sqhd;	/* submission queue head pointer */
+	uint16_t		sqid;	/* submission queue identifier */
+
+	/* dword 3 */
+	uint16_t		cid;	/* command identifier */
+	union {
+		uint16_t                status_raw;
+		struct spdk_nvme_status	status;
+	};
+};
+SPDK_STATIC_ASSERT(sizeof(struct spdk_nvme_cpl) == 16, "Incorrect size");
+```
