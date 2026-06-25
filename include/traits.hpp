@@ -13,11 +13,11 @@ namespace nvme
     // fwd declarations
     // implemented in admin_queue.hpp
     struct AdminSubmissionEntry;
-    struct AdminCompletionEntry;
 
     // implemented in io_queue.hpp
     struct IOSubmissionEntry;
-    struct IOCompletionEntry;
+
+    struct CompletionEntry;
 
     struct QueueHardwareContext {
         std::uint16_t queue_id;
@@ -29,13 +29,13 @@ namespace nvme
 
     template <> struct QueueTraits<AdminQueueKind> {
         using SubmissionEntry = AdminSubmissionEntry;
-        using CompletionEntry = AdminCompletionEntry;
+        using CompletionEntry = CompletionEntry;
         static constexpr std::size_t depth = constants::AQ_DEPTH;
     };
 
     template <> struct QueueTraits<IOQueueKind> {
         using SubmissionEntry = IOSubmissionEntry;
-        using CompletionEntry = IOCompletionEntry;
+        using CompletionEntry = CompletionEntry;
         static constexpr std::size_t depth = constants::IO_DEPTH;
     };
 }

@@ -1,12 +1,9 @@
 #pragma once
 
-#include <array>
 #include <vector>
 
-#include "dma_ring.hpp"
 #include "submission_queue.hpp"
 #include "completion_queue.hpp"
-#include "traits.hpp"
 
 namespace nvme
 {
@@ -16,5 +13,8 @@ template <class Kind> struct QueuePair {
     std::vector<SubmissionQueue<Kind>> submission_queues;
     CompletionQueue<Kind> completion_queue;
 };
+
+using AdminQueuePair = QueuePair<AdminQueueKind>;
+
 
 } // namespace nvme

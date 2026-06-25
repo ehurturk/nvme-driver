@@ -6,7 +6,7 @@
 #include <cstring>
 
 #include "traits.hpp"
-#include "dma_ring.hpp"
+#include "mapped_dma_buffer.hpp"
 
 namespace nvme
 {

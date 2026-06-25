@@ -20,11 +20,11 @@ using IOVA = std::uint64_t;
 // is needed to (obviously) access it through the host,
 // whereas IOVA is used primarly for DMA and passing
 // queue memory location to the controller.
-class MappedDmaBuffer
+class DmaMemory
 {
   public:
     // mmaps aligned region from RAM via MAP_PRIVATE and MAP_ANONYMOUS with READ/WRITE PROT rules.
-    explicit MappedDmaBuffer(std::size_t size) : size_(size)
+    explicit DmaMemory(std::size_t size) : size_(size)
     {
         void *dma_region = ::mmap(nullptr, size, PROT_READ | PROT_WRITE,
                 MAP_SHARED | MAP_ANONYMOUS, 0, 0);
@@ -38,22 +38,22 @@ class MappedDmaBuffer
     }
 
     // munmaps the mapped DMA region
-    ~MappedDmaBuffer()
+    ~DmaMemory()
     {
         if (uva_ != nullptr)
             ::munmap(uva_, size_);
         // TODO: should this also call VFIO_UNMAP_DMA?
     }
 
-    MappedDmaBuffer(MappedDmaBuffer &&other) noexcept
+    DmaMemory(DmaMemory &&other) noexcept
             : uva_{std::exchange(other.uva_, nullptr)},
               iova_{std::exchange(other.iova_, 0)},
               size_{std::exchange(other.size_, 0)}
     {
     }
 
-    MappedDmaBuffer(const MappedDmaBuffer &) = delete;
-    MappedDmaBuffer &operator=(const MappedDmaBuffer &) = delete;
+    DmaMemory(const DmaMemory &) = delete;
+    DmaMemory &operator=(const DmaMemory &) = delete;
 
     // IOVA should only be set after VFIO_IOMMU_MAP_DMA call
     inline void set_iova(IOVA v)
