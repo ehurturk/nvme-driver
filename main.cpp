@@ -276,9 +276,9 @@ int main()
 
     // Execute a volatile read into the memory mapped region to get
     // the CAP value (8 bytes in size).
-    std::uint64_t cap = utils::MMIORead(controller_properties->cap);
+    std::uint64_t cap = utils::ReadVolatile(controller_properties->cap);
 
-    auto vs = utils::MMIORead(controller_properties->vs);
+    auto vs = utils::ReadVolatile(controller_properties->vs);
     auto minor = nvme::vs::MinorVersion::extract(vs);
     auto major = nvme::vs::MajorVersion::extract(vs);
 
@@ -286,8 +286,8 @@ int main()
 
     // Configure the Controller
 
-    volatile std::uint32_t cc = utils::MMIORead(controller_properties->cc);
-    volatile std::uint32_t csts = utils::MMIORead(controller_properties->csts);
+    volatile std::uint32_t cc = utils::ReadVolatile(controller_properties->cc);
+    volatile std::uint32_t csts = utils::ReadVolatile(controller_properties->csts);
 
     auto capTimeout = nvme::cap::TIMEOUT::extract(cap);
     assert(capTimeout <= 0xFF && "Maximum timeout value is 0xFF.");
@@ -312,11 +312,11 @@ int main()
     // First disable the controller, as AMS, MPS, and CSS has to be
     // written while the controller is disabled (EN = 0)
     cc = nvme::cc::EN::insert(cc, 0b0);
-    utils::MMIOWrite(controller_properties->cc, cc);
+    utils::WriteVolatile(controller_properties->cc, cc);
 
     auto rdy_is = [&](unsigned want) -> bool {
         return nvme::csts::RDY::extract(
-                       utils::MMIORead(controller_properties->csts)) == want;
+                       utils::ReadVolatile(controller_properties->csts)) == want;
     };
 
     // Wait for ready bit to be cleared to 0 after EN is set to 0
@@ -386,19 +386,19 @@ int main()
 
     // Setup AQA & ASQ & ACQ
 
-    volatile uint32_t aqa = utils::MMIORead(controller_properties->aqa);
+    volatile uint32_t aqa = utils::ReadVolatile(controller_properties->aqa);
     aqa = nvme::aqa::ASQS::insert(aqa, nvme::constants::AQ_DEPTH);
     aqa = nvme::aqa::ACQS::insert(aqa, nvme::constants::AQ_DEPTH);
 
     // TODO: Populate adminQueue queues with IOVA and UVA.
     nvme::AdminQueuePair adminPair{};
 
-    volatile uint64_t asq = utils::MMIORead(controller_properties->asq);
+    volatile uint64_t asq = utils::ReadVolatile(controller_properties->asq);
     std::uint64_t asqb = adminPair.submission_queues_.front().mem_.iova;
     assert(asqb % (1 << ccMps) == 0 && "ASQB shall be memory page aligned (based on the value in CC.MPS)");
     asq = nvme::asq::ASQB::insert(asq, asqb);
 
-    volatile uint64_t acq = utils::MMIORead(controller_properties->acq);
+    volatile uint64_t acq = utils::ReadVolatile(controller_properties->acq);
     std::uint64_t acqb = adminPair.completion_queue_.mem_.iova;
     assert(acqb % (1 << ccMps) == 0 && "ACQB shall be memory page aligned (based on the value in CC.MPS)");
     acq = nvme::acq::ACQB::insert(acq, acqb);
@@ -406,7 +406,7 @@ int main()
     // Enable controller
     cc = nvme::cc::EN::insert(cc, 0b1);
 
-    utils::MMIOWrite(controller_properties->cc, cc);
+    utils::WriteVolatile(controller_properties->cc, cc);
 
     // Wait for the RDY bit to become 1 after EN is set to 1.
     if (!wait_for([&] { return rdy_is(1); }, timeout)) {
@@ -427,7 +427,7 @@ int main()
     // Disable the controller
     cc = nvme::cc::EN::insert(cc, 0b0);
 
-    utils::MMIOWrite(controller_properties->cc, cc);
+    utils::WriteVolatile(controller_properties->cc, cc);
 
     if (!wait_for([&] { return rdy_is(0); }, timeout)) {
         std::println("[TIMEOUT]: Controller did not become disabled.");

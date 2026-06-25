@@ -31,12 +31,12 @@ struct BitField {
 };
 
 template <typename T>
-[[nodiscard]] T MMIORead(const volatile T& reg) noexcept {
+[[nodiscard]] T ReadVolatile(const volatile T& reg) noexcept {
   return reg;
 }
 
 template <typename T>
-void MMIOWrite(volatile T& reg, T value) noexcept {
+void WriteVolatile(volatile T& reg, T value) noexcept {
   reg = value;
 }
 

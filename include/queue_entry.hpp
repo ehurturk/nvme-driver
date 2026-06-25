@@ -41,6 +41,26 @@ struct CDW0 {
         raw = cdw0::FUSE::insert(raw, fuse);
     }
 
+    std::uint8_t opcode()
+    {
+        return cdw0::OPC::extract(raw);
+    }
+
+    std::uint16_t cid()
+    {
+        return cdw0::CID::extract(raw);
+    }
+
+    std::uint8_t psdt()
+    {
+        return cdw0::PSDT::extract(raw);
+    }
+
+    std::uint8_t fuse()
+    {
+        return cdw0::FUSE::extract(raw);
+    }
+
     DWRD value() const
     {
         return raw;
@@ -97,6 +117,16 @@ struct CDW2 {
         raw = cdw2::SQID::insert(raw, sqid);
     }
 
+    std::uint16_t sqhp()
+    {
+        return cdw2::SQHP::extract(raw);
+    }
+
+    std::uint16_t cid()
+    {
+        return cdw2::SQID::extract(raw);
+    }
+
     DWRD value() const
     {
         return raw;
@@ -115,9 +145,25 @@ struct CDW3 {
     {
         raw = cdw3::P::insert(raw, p);
     }
+
     void set_status(std::uint16_t status)
     {
         raw = cdw3::STATUS::insert(raw, status);
+    }
+
+    std::uint16_t cid()
+    {
+        return cdw3::CID::extract(raw);
+    }
+
+    std::uint8_t phase()
+    {
+        return cdw3::P::extract(raw);
+    }
+
+    std::uint16_t status()
+    {
+        return cdw3::STATUS::extract(raw);
     }
 
     DWRD value() const
