@@ -152,6 +152,16 @@ struct alignas(4096) NvmeBar0 {
     // etc...
 };
 
+class NVMeBar0
+{
+    public:
+      NVMeBar0(void *base)
+              : base_{static_cast<std::byte *>(base)} {}
+    private:
+        std::byte* base_;
+
+};
+
 static_assert(std::is_standard_layout_v<NvmeBar0>);
 static_assert(offsetof(NvmeBar0, vs) == 0x0008);
 static_assert(offsetof(NvmeBar0, intms) == 0x000C);

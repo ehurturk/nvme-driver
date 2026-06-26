@@ -50,8 +50,8 @@ class CompletionQueue
 
         Entry *e = compat::load_object_from_bytes<Entry>(dst);
 
-        DWRD raw_cdw3 = utils::ReadVolatile(e->cdw3.raw);
-        std::uint8_t phase = cqe::cdw3::P::extract(raw_cdw3);
+        std::uint16_t status = utils::ReadVolatile(e->status);
+        std::uint8_t phase = cqe::phase(status);
 
         if (phase != expected_bit_) {
             return std::nullopt;

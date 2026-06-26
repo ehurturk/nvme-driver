@@ -24,7 +24,6 @@ enum class Opcode : std::uint8_t {
     AsyncEvent = 0x0C,
 };
 
-
 namespace commands
 {
 
@@ -39,6 +38,16 @@ struct Abort {
         CommonCommand c = CommonCommand::build(Opcode::Abort, this_cid);
         c.cdw10 = layout::abort_cdw10::encode(sqid, cid);
         return c;
+    }
+
+    struct Completion {
+        bool immediate_abort_not_performed;
+    };
+
+    static Completion decode_completion(const CompletionEntry& c)
+    {
+        return Completion{
+                .immediate_abort_not_performed = (c.completion_result.cdw0 & 0x1) == 1};
     }
 };
 
@@ -70,13 +79,12 @@ struct CreateIoCq {
         c.dptr = DataPointer::prp(prp1);
         c.cdw10 = layout::create_io_q_cdw10::encode(qid, qsize);
         c.cdw11 = layout::create_io_cq_cdw11::encode(
-            physically_contiguous,
-            interrupts_enabled,
-            interrupt_vector
-        );
+                physically_contiguous, interrupts_enabled, interrupt_vector);
 
         return c;
     }
+    struct Completion {};
+    static Completion decode_completion(const CompletionEntry& c) { return Completion{}; }
 };
 
 // create I/O Submission Queue (0x01)
@@ -120,14 +128,13 @@ struct CreateIoSq {
         c.dptr = DataPointer::prp(prp1);
         c.cdw10 = layout::create_io_q_cdw10::encode(qid, qsize);
         c.cdw11 = layout::create_io_sq_cdw11::encode(
-            physically_contiguous,
-            priority,
-            cqid
-        );
+                physically_contiguous, priority, cqid);
         c.cdw12 = layout::create_io_sq_cdw12::encode(nvmsetid);
 
         return c;
     }
+    struct Completion {};
+    static Completion decode_completion(const CompletionEntry& c) { return Completion{}; }
 };
 
 // The delete IO CQ command is used to delete an IO completion queue.
@@ -145,6 +152,10 @@ struct DeleteIoCq {
         c.cdw10 = layout::delete_io_q_cdw10::encode(qid);
         return c;
     }
+
+    struct Completion {};
+    static Completion decode_completion(const CompletionEntry& c) { return Completion{}; }
+
 };
 
 // The delete IO SQ command is used to delete an IO submission queue.
@@ -160,6 +171,8 @@ struct DeleteIoSq {
         c.cdw10 = layout::delete_io_q_cdw10::encode(qid);
         return c;
     }
+    struct Completion {};
+    static Completion decode_completion(const CompletionEntry& c) { return Completion{}; }
 };
 
 // Identify (opcode 0x06)
@@ -190,19 +203,57 @@ struct Identify {
         c.nsid = nsid;
         c.dptr = DataPointer::prp(prp1);
         c.cdw10 = layout::identify_cdw10::encode(
-            utils::to_underlying(cns),
-            cntid
-        );
+                utils::to_underlying(cns), cntid);
         c.cdw11 = layout::identify_cdw11::encode(cnssid, csi);
 
         return c;
     }
+
+    struct Completion {
+    };
+
+    static Completion decode_completion(const CompletionEntry& c) { return Completion{}; }
 };
 
 struct AsyncEventRequest {
     CommonCommand build(std::uint16_t this_cid) const noexcept
     {
         return CommonCommand::build(Opcode::AsyncEvent, this_cid);
+    }
+
+    enum class AsynchronousEventType : std::uint8_t {
+        ErrorStatus = 0b000,
+        SMART_HealthStatus = 0b001,
+        Notice = 0b010,
+        Immediate = 0b011,
+        OneShot = 0b100,
+        IOCommandSpecificStatus = 0b110
+    };
+
+    struct Completion {
+        using AET = utils::BitField<std::uint32_t, 0, 3>;
+        using AEI = utils::BitField<std::uint32_t, 8, 8>;
+        using LID = utils::BitField<std::uint32_t, 16, 8>;
+
+        // cdw0
+        AsynchronousEventType type;
+        std::uint8_t information;
+        std::uint8_t log_page_id;
+
+        // cdw1
+        DWRD event_specific_param;
+    };
+
+    static Completion decode_completion(const CompletionEntry& c)
+    {
+        Completion cl{};
+        DWRD dw0 = c.completion_result.cdw0;
+        cl.type = static_cast<AsynchronousEventType>(Completion::AET::extract(dw0));
+        cl.information = Completion::AEI::extract(dw0);
+        cl.log_page_id = Completion::LID::extract(dw0);
+        cl.event_specific_param = c.completion_result.cdw1;
+
+        return cl;
     }
 };
 
@@ -221,8 +272,7 @@ struct AsyncEventRequest {
 //          bits 8 - 15: Aggregation Time (TIME): Specifies the recommended maximum time in 100 microsecond increments
 //                                                that a controller may delay an interrupt due to interrupt coalescing.
 // CDW14: bits 0 - 6: UUID index
-template <typename Feature>
-struct SetFeatures {
+template <typename Feature> struct SetFeatures {
     Feature feature;
     bool save = false;
     std::uint64_t prp1 = 0;
@@ -239,10 +289,16 @@ struct SetFeatures {
 
         return c;
     }
+
+    using Completion = typename Feature::Completion;
+
+    static Completion decode_completion(const CompletionEntry &e)
+    {
+        return Feature::decode_completion(e);
+    }
 };
 
-template <typename Feature>
-struct GetFeatures {
+template <typename Feature> struct GetFeatures {
     features::Select sel = features::Select::Current;
     std::uint64_t prp1 = 0;
     std::uint8_t uuid_index = 0;
@@ -256,6 +312,13 @@ struct GetFeatures {
         c.cdw14 = features::cdw14_uuid_index(uuid_index);
 
         return c;
+    }
+
+    using Completion = typename Feature::Completion;
+
+    static Completion decode_completion(const CompletionEntry &e)
+    {
+        return Feature::decode_completion(e);
     }
 };
 

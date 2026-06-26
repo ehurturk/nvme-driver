@@ -18,13 +18,11 @@ class AdminQueuePair
         CompletionQueue<AdminQueueKind> cq_;
 };
 
-
 class IOQueuePair
 {
     private:
         std::vector<SubmissionQueue<AdminQueueKind>> sqs_;
         CompletionQueue<AdminQueueKind> cq_;
-
 };
 
 } // namespace nvme

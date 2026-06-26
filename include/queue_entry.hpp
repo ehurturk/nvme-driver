@@ -8,17 +8,16 @@ namespace nvme
 
 namespace admin
 {
-    enum class Opcode : std::uint8_t;
+enum class Opcode : std::uint8_t;
 }
-
 
 namespace sqe::cdw0
 {
 
-using OPC  = utils::BitField<DWRD, 0, 8>;
+using OPC = utils::BitField<DWRD, 0, 8>;
 using FUSE = utils::BitField<DWRD, 8, 2>;
 using PSDT = utils::BitField<DWRD, 14, 2>;
-using CID  = utils::BitField<DWRD, 16, 16>;
+using CID = utils::BitField<DWRD, 16, 16>;
 
 enum class Psdt : std::uint8_t {
     Prp = 0b00,
@@ -26,31 +25,16 @@ enum class Psdt : std::uint8_t {
     Sgl2 = 0b10,
 };
 
-inline DWRD encode(admin::Opcode opc,
-                    std::uint16_t cid,
-                    Psdt psdt = Psdt::Prp) noexcept
+inline DWRD encode(
+        admin::Opcode opc, std::uint16_t cid, Psdt psdt = Psdt::Prp) noexcept
 {
     return utils::DwordBuilder<>{}
-        .set<OPC>(utils::to_underlying(opc))
-        .set<PSDT>(utils::to_underlying(psdt))
-        .set<CID>(cid)
-        .get();
+            .set<OPC>(utils::to_underlying(opc))
+            .set<PSDT>(utils::to_underlying(psdt))
+            .set<CID>(cid)
+            .get();
 }
-} // namespace cdw0
-
-
-namespace cqe::cdw2
-{
-using SQHP = utils::BitField<DWRD, 0, 16>;
-using SQID = utils::BitField<DWRD, 16, 16>;
-} // namespace cqe::cdw2
-
-namespace cqe::cdw3
-{
-using CID = utils::BitField<DWRD, 0, 16>;
-using P = utils::BitField<DWRD, 16, 1>;
-using STATUS = utils::BitField<DWRD, 17, 15>;
-} // namespace cqe::cdw3
+} // namespace sqe::cdw0
 
 struct DataPointer {
     std::uint64_t prp1;
@@ -85,11 +69,62 @@ struct CommonCommand {
     }
 };
 
-struct CompletionEntry {
+namespace cqe
+{
+namespace status
+{
+using P = utils::BitField<std::uint16_t, 0, 1>; // phase tag
+using SC = utils::BitField<std::uint16_t, 1, 8>; // status code
+using SCT = utils::BitField<std::uint16_t, 9, 3>; // status code type
+using CRD = utils::BitField<std::uint16_t, 12, 2>; // command retry delay
+using M = utils::BitField<std::uint16_t, 14, 1>; // more
+using DNR = utils::BitField<std::uint16_t, 15, 1>; // do not retry
+
+enum class StatusCodeType : std::uint8_t {
+    Generic = 0x0,
+    CommandSpecific = 0x1,
+    MediaDataIntegrity = 0x2,
+    PathRelated = 0x3,
+};
+
+} // namespace status
+
+// phase bit is the first bit of the status field
+inline std::uint8_t phase(std::uint16_t status)
+{
+    return status & 0x1;
+}
+
+} // namespace cqe
+
+// Contents of Dword 0 and Dword 1 in a CompletionEntry are
+// command specific. If a command uses Dword 0 or Dwod 1, then
+// the definition of these dwords is contained with the associated
+// command definition.
+struct CompletionResult {
     DWRD cdw0;
     DWRD cdw1;
-    DWRD cdw2; // sqhd + sqid
-    DWRD cdw3; // cid + status + phase
+};
+
+struct CompletionEntry {
+    // cdw0 and cdw1:
+    CompletionResult completion_result;
+
+    // cdw2:
+    std::uint16_t sq_head;
+    std::uint16_t sqid;
+
+    // cdw3:
+    std::uint16_t cid;
+    std::uint16_t status; // first bit is the present (P) bit
+
+    inline bool succeeded() noexcept
+    {
+        // SC bits are bits 1-8 and SCT Bits are bits 9-11
+        // so this bitmask is bits 1-11:
+        // 0x0ffe = 0000_1111_1111_1110
+        return (status & 0x0ffe) == 0;
+    }
 };
 
 namespace sqe
@@ -125,34 +160,13 @@ inline std::uint8_t fuse(const CommonCommand &c)
 
 } // namespace sqe
 
-namespace cqe
-{
-inline std::uint16_t cid(const CompletionEntry &c)
-{
-    return cdw3::CID::extract(c.cdw3);
-}
-
-inline std::uint8_t phase(const CompletionEntry &c)
-{
-    return cdw3::P::extract(c.cdw3);
-}
-
-inline std::uint16_t status(const CompletionEntry &c)
-{
-    return cdw3::STATUS::extract(c.cdw3);
-}
-
-inline std::uint16_t sqhd(const CompletionEntry &c)
-{
-    return cdw2::SQHP::extract(c.cdw2);
-}
-} // namespace cqe
-
 // check props
-static_assert(sizeof(DWRD) == 4);
-static_assert(sizeof(DataPointer) == 16);
+static_assert(sizeof(DWRD) == 4, "DWRD must be 4 bytes in size");
+static_assert(sizeof(DataPointer) == 16, "DataPointer must be 2 QWRD (16-bytes) in size");
+static_assert(sizeof(CompletionResult) == 8, "CompletionResult must be 2 DWRD (8-bytes) in size");
 
-static_assert(sizeof(CommonCommand) == 64);
+static_assert(sizeof(CommonCommand) == 64, "SQE must be 64 bytes");
+static_assert(sizeof(CompletionEntry) == 16, "CQE must be 16 bytes");
 
 static_assert(std::is_standard_layout_v<CommonCommand>);
 static_assert(std::is_trivially_copyable_v<CommonCommand>);
@@ -173,5 +187,10 @@ static_assert(offsetof(CommonCommand, cdw13) == 52);
 static_assert(offsetof(CommonCommand, cdw14) == 56);
 static_assert(offsetof(CommonCommand, cdw15) == 60);
 
-static_assert(sizeof(CompletionEntry) == 16, "CQE must be 16 bytes");
+static_assert(offsetof(CompletionEntry, completion_result) == 0);
+static_assert(offsetof(CompletionEntry, sq_head) == 8);
+static_assert(offsetof(CompletionEntry, sqid) == 10);
+static_assert(offsetof(CompletionEntry, cid) == 12);
+static_assert(offsetof(CompletionEntry, status) == 14);
+
 } // namespace nvme

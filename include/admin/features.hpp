@@ -3,6 +3,7 @@
 #include <assert.h>
 
 #include "../utils.hpp"
+#include "../queue_entry.hpp"
 
 namespace nvme
 {
@@ -77,21 +78,22 @@ struct NumberOfQueues {
 
     // completion dw0
     struct Completion {
+        std::uint16_t allocated_sq;
+        std::uint16_t allocated_cq;
+    };
+
+    static Completion decode_completion(const CompletionEntry &c) noexcept
+    {
         using NSQA = utils::BitField<DWRD, 0, 16>;
         using NCQA = utils::BitField<DWRD, 16, 16>;
 
-        static std::uint16_t allocated_sq(DWRD completion_dw0) noexcept
-        {
-            return static_cast<std::uint16_t>(
-                    NSQA::extract(completion_dw0) + 1);
-        }
-
-        static std::uint16_t allocated_cq(DWRD completion_dw0) noexcept
-        {
-            return static_cast<std::uint16_t>(
-                    NCQA::extract(completion_dw0) + 1);
-        }
-    };
+        return Completion{
+                .allocated_sq =
+                        static_cast<std::uint16_t>(NSQA::extract(c.completion_result.cdw0) + 1),
+                .allocated_cq =
+                        static_cast<std::uint16_t>(NCQA::extract(c.completion_result.cdw0) + 1),
+        };
+    }
 };
 
 // Interrupt Coalescing: Feature Id: 0x08
@@ -112,6 +114,13 @@ struct InterruptCoalescing {
                 .set<Cdw11::THR>(threshold)
                 .set<Cdw11::TIME>(time_100us)
                 .get();
+    }
+
+    struct Completion {};
+
+    static Completion decode_completion(const CompletionEntry &c) noexcept
+    {
+        return Completion{};
     }
 };
 } // namespace features

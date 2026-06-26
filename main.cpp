@@ -17,9 +17,9 @@
 #include <version>
 #include <concepts>
 
-#include "include/admin_queue.hpp"
 #include "include/nvme_spec.hpp"
 #include "include/lifetime.hpp"
+#include "include/queue_pair.hpp"
 
 namespace nvme
 {
@@ -394,12 +394,12 @@ int main()
     nvme::AdminQueuePair adminPair{};
 
     volatile uint64_t asq = utils::ReadVolatile(controller_properties->asq);
-    std::uint64_t asqb = adminPair.submission_queues_.front().mem_.iova;
+    std::uint64_t asqb = 0;
     assert(asqb % (1 << ccMps) == 0 && "ASQB shall be memory page aligned (based on the value in CC.MPS)");
     asq = nvme::asq::ASQB::insert(asq, asqb);
 
     volatile uint64_t acq = utils::ReadVolatile(controller_properties->acq);
-    std::uint64_t acqb = adminPair.completion_queue_.mem_.iova;
+    std::uint64_t acqb = 0;
     assert(acqb % (1 << ccMps) == 0 && "ACQB shall be memory page aligned (based on the value in CC.MPS)");
     acq = nvme::acq::ACQB::insert(acq, acqb);
 
