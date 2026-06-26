@@ -17,6 +17,7 @@
 #include <version>
 #include <concepts>
 
+#include "include/controller.hpp"
 #include "include/nvme_spec.hpp"
 #include "include/lifetime.hpp"
 #include "include/queue_pair.hpp"
@@ -271,153 +272,9 @@ int main()
         return EXIT_FAILURE;
     }
 
-    auto *controller_properties =
-            reinterpret_cast<volatile nvme::NvmeBar0 *>(bar0);
-
-    // Execute a volatile read into the memory mapped region to get
-    // the CAP value (8 bytes in size).
-    std::uint64_t cap = utils::ReadVolatile(controller_properties->cap);
-
-    auto vs = utils::ReadVolatile(controller_properties->vs);
-    auto minor = nvme::vs::MinorVersion::extract(vs);
-    auto major = nvme::vs::MajorVersion::extract(vs);
-
-    std::println("[INFO] NVMe Version: {}.{}", major, minor);
-
-    // Configure the Controller
-
-    volatile std::uint32_t cc = utils::ReadVolatile(controller_properties->cc);
-    volatile std::uint32_t csts = utils::ReadVolatile(controller_properties->csts);
-
-    auto capTimeout = nvme::cap::TIMEOUT::extract(cap);
-    assert(capTimeout <= 0xFF && "Maximum timeout value is 0xFF.");
-
-    auto timeout = capTimeout * 500ms; // in milliseconds
-
-    auto wait_for = [](std::predicate auto &&predicate,
-                            std::chrono::milliseconds timeout) -> bool {
-        auto deadline = std::chrono::steady_clock::now() + timeout;
-
-        while (!predicate()) {
-            if (std::chrono::steady_clock::now() >= deadline) {
-                return false;
-            }
-
-            std::this_thread::sleep_for(1ms);
-        }
-
-        return true;
-    };
-
-    // First disable the controller, as AMS, MPS, and CSS has to be
-    // written while the controller is disabled (EN = 0)
-    cc = nvme::cc::EN::insert(cc, 0b0);
-    utils::WriteVolatile(controller_properties->cc, cc);
-
-    auto rdy_is = [&](unsigned want) -> bool {
-        return nvme::csts::RDY::extract(
-                       utils::ReadVolatile(controller_properties->csts)) == want;
-    };
-
-    // Wait for ready bit to be cleared to 0 after EN is set to 0
-    if (!wait_for([&] { return rdy_is(0); }, timeout)) {
-        std::println("[TIMEOUT]: Controller did not become disabled.");
-        close(device_fd);
-        close(group_fd);
-        close(container_fd);
-        return EXIT_FAILURE;
-    }
-
-    auto capAms = nvme::cap::AMS::extract(cap);
-    auto capMPSMax = nvme::cap::MPSMax::extract(cap);
-    auto capMPSMin = nvme::cap::MPSMin::extract(cap);
-    std::uint8_t capCss = nvme::cap::CSS::extract(cap);
-
-    // Set CC.AMS
-    uint8_t ccAms{};
-    if (capAms == 0) {
-        std::println("AMS: Vendor specific.");
-        ccAms = 0b0; // TODO: 0b111 or 0b0?
-    } else if (capAms == 1) {
-        std::println("AMS: WRRUPC");
-        ccAms = 0b1;
-    } else {
-        std::println("Unsupported AMS. Defaulting to round robin.");
-        ccAms = 0b0;
-    }
-
-    // Set CC.MPS
-    uint8_t ccMps{0};
-    std::println("MPSMax: {}\nMPSMin: {}", capMPSMax, capMPSMin);
-
-    if (ccMps < capMPSMin || ccMps > capMPSMax) {
-        ccMps = capMPSMin;
-        std::println("[INFO]: ccMps {} is out of bounds, setting it as "
-                     "capMPSMin: {}",
-                ccMps, capMPSMin);
-    }
-
-    // Set CC.CSS
-    uint8_t ccCss{0};
-
-    if (capCss & nvme::cap::css::NCSS_BIT) {
-        std::println("NCSS Bit is present...");
-        ccCss = nvme::cc::css::NCSS;
-    } else {
-        std::println("NVME Command Set is not found.");
-        close(container_fd);
-        close(group_fd);
-        close(device_fd);
-        return EXIT_FAILURE;
-    }
-
-    // Insert AS, MPS, CSS into CC
-    cc = nvme::cc::AMS::insert(cc, ccAms);
-    cc = nvme::cc::MPS::insert(cc, ccMps);
-    cc = nvme::cc::CSS::insert(cc, ccCss);
-
-    // Set CC.IOSQES / CC.IOCQES
-    // For creating the admin queues, I will set IOSQES/IOCQES to standard
-    // NVM Command Set values (64 and 16 bytes respectively), and after running
-    // Identify Controller command, I will adjust these to the correct required
-    // minimums to create the I/O queues.
-    cc = nvme::cc::IOSQES::insert(cc, nvme::constants::IO_SQES);
-    cc = nvme::cc::IOCQES::insert(cc, nvme::constants::IO_CQES);
-
-    // Setup AQA & ASQ & ACQ
-
-    volatile uint32_t aqa = utils::ReadVolatile(controller_properties->aqa);
-    aqa = nvme::aqa::ASQS::insert(aqa, nvme::constants::AQ_DEPTH);
-    aqa = nvme::aqa::ACQS::insert(aqa, nvme::constants::AQ_DEPTH);
-
-    // TODO: Populate adminQueue queues with IOVA and UVA.
-    nvme::AdminQueuePair adminPair{};
-
-    volatile uint64_t asq = utils::ReadVolatile(controller_properties->asq);
-    std::uint64_t asqb = 0;
-    assert(asqb % (1 << ccMps) == 0 && "ASQB shall be memory page aligned (based on the value in CC.MPS)");
-    asq = nvme::asq::ASQB::insert(asq, asqb);
-
-    volatile uint64_t acq = utils::ReadVolatile(controller_properties->acq);
-    std::uint64_t acqb = 0;
-    assert(acqb % (1 << ccMps) == 0 && "ACQB shall be memory page aligned (based on the value in CC.MPS)");
-    acq = nvme::acq::ACQB::insert(acq, acqb);
-
-    // Enable controller
-    cc = nvme::cc::EN::insert(cc, 0b1);
-
-    utils::WriteVolatile(controller_properties->cc, cc);
-
-    // Wait for the RDY bit to become 1 after EN is set to 1.
-    if (!wait_for([&] { return rdy_is(1); }, timeout)) {
-        std::println("[TIMEOUT]: Controller did not become enabled.");
-        close(device_fd);
-        close(group_fd);
-        close(container_fd);
-        return EXIT_FAILURE;
-    }
-
-    std::println("[INFO] Controller is enabled.");
+    nvme::Controller controller{bar0};
+    controller.configure();
+    controller.enable();
 
     // Create an I/O Queue
     // 1) Initialize CC.IOCQES / CC.IOSQES
@@ -425,19 +282,7 @@ int main()
     //::ioctl(device_fd, VFIO_DEVICE_RESET);
 
     // Disable the controller
-    cc = nvme::cc::EN::insert(cc, 0b0);
-
-    utils::WriteVolatile(controller_properties->cc, cc);
-
-    if (!wait_for([&] { return rdy_is(0); }, timeout)) {
-        std::println("[TIMEOUT]: Controller did not become disabled.");
-        close(device_fd);
-        close(group_fd);
-        close(container_fd);
-        return EXIT_FAILURE;
-    }
-
-    std::println("[INFO] Controller is disabled.");
+    controller.disable();
 
     //::ioctl(container_fd, VFIO_IOMMU_UNMAP_DMA, &dma_map);
 

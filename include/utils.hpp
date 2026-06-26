@@ -83,45 +83,56 @@ template <typename Enum> constexpr auto to_underlying(Enum e) noexcept
 template <typename T>
 [[nodiscard]] T ReadVolatile(const volatile T &reg) noexcept
 {
+    static_assert(std::is_integral_v<T> || std::is_enum_v<T>);
     return reg;
 }
 
 template <typename T> void WriteVolatile(volatile T &reg, T value) noexcept
 {
+    static_assert(std::is_integral_v<T> || std::is_enum_v<T>);
     reg = value;
 }
 
 class MmioRegion
 {
-  public:
-    explicit MmioRegion(void *base) : base_{reinterpret_cast<std::byte *>(base)}
+public:
+    explicit MmioRegion(void* base) noexcept
+        : base_{static_cast<std::byte*>(base)}
     {
     }
 
-    std::uint32_t read32(std::size_t offset) const
+    std::uint32_t read32(std::size_t offset) const noexcept
     {
-        return ReadVolatile(base_ + offset);
+        return ReadVolatile(reg<std::uint32_t>(offset));
     }
 
-    void write32(std::size_t offset, std::uint32_t value) const
-        {
-            WriteVolatile(base_ + offset, value);
-        }
-
-std::uint32_t read64(std::size_t offset) const
-        {
-            auto lo = read32(off);
-            auto hi = read32(off + 4);
-            return std::uint64_t{lo} | (std::uint64_t{hi} << 32);
+    void write32(std::size_t offset, std::uint32_t value) const noexcept
+    {
+        WriteVolatile(reg<std::uint32_t>(offset), value);
     }
 
-    void write32(std::size_t offset, std::uint32_t value) const
-        {
-            WriteVolatile(base_ + offset, value);
+    std::uint64_t read64(std::size_t offset) const noexcept
+    {
+        const auto lo = read32(offset);
+        const auto hi = read32(offset + 4);
+
+        return std::uint64_t{lo} | (std::uint64_t{hi} << 32);
     }
 
-  private:
-    std::byte *base_;
+    void write64(std::size_t offset, std::uint64_t value) const noexcept
+    {
+        write32(offset, static_cast<std::uint32_t>(value));
+        write32(offset + 4, static_cast<std::uint32_t>(value >> 32));
+    }
+
+private:
+    template <typename T>
+    volatile T& reg(std::size_t offset) const noexcept
+    {
+        return *reinterpret_cast<volatile T*>(base_ + offset);
+    }
+
+private:
+    std::byte* base_;
 };
-
 } // namespace utils

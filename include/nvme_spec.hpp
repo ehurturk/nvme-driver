@@ -135,41 +135,110 @@ constexpr static size_t IO_SQES = 6;
 constexpr static size_t IO_CQES = 4;
 } // namespace constants
 
-struct alignas(4096) NvmeBar0 {
-    volatile uint64_t cap; // 0x0000 Controller Capabilities
-    volatile uint32_t vs; // 0x0008 Version
-    volatile uint32_t intms; // 0x000C Interrupt Mask Set
-    volatile uint32_t intmc; // 0x0010 Interrupt Mask Clear
-    volatile uint32_t cc; // 0x0014 Controller Configuration
-    uint32_t _pad0; // 0x0018 padding
-    volatile uint32_t csts; // 0x001C Controller Status
-    volatile uint32_t nssr; // 0x0020 NVM Subsystem Reset
-    volatile uint32_t aqa; // 0x0024 Admin Queue Attributes
-    volatile uint64_t asq; // 0x0028 Admin SQ Base Address
-    volatile uint64_t acq; // 0x0030 Admin CQ Base Address
-    volatile uint32_t cmbloc; // 0x0038 CMB Location
-    volatile uint32_t cmbsz; // 0x003C CMB Size
-    // etc...
-};
+namespace bar0
+{
+constexpr std::size_t CAP = 0x00;
+constexpr std::size_t VS = 0x08;
+constexpr std::size_t INTMS = 0x0c;
+constexpr std::size_t INTMC = 0x10;
+constexpr std::size_t CC = 0x14;
+constexpr std::size_t CSTS = 0x1c;
+constexpr std::size_t NSSR = 0x20;
+constexpr std::size_t AQA = 0x24;
+constexpr std::size_t ASQ = 0x28;
+constexpr std::size_t ACQ = 0x30;
+constexpr std::size_t CMBLOC = 0x38;
+constexpr std::size_t CMBSZ = 0x3c;
+} // namespace bar0
 
 class NVMeBar0
 {
-    public:
-      NVMeBar0(void *base)
-              : base_{static_cast<std::byte *>(base)} {}
-    private:
-        std::byte* base_;
+  public:
+    explicit NVMeBar0(void *base) : bar0_{base}
+    {
+    }
 
+    std::uint64_t cap() const
+    {
+        return bar0_.read64(bar0::CAP);
+    }
+    std::uint64_t vs() const
+    {
+        return bar0_.read64(bar0::VS);
+    }
+    std::uint64_t intms() const
+    {
+        return bar0_.read64(bar0::INTMS);
+    }
+    std::uint64_t intmc() const
+    {
+        return bar0_.read64(bar0::INTMC);
+    }
+    std::uint64_t cc() const
+    {
+        return bar0_.read64(bar0::CC);
+    }
+    std::uint64_t csts() const
+    {
+        return bar0_.read64(bar0::CSTS);
+    }
+    std::uint64_t nssr() const
+    {
+        return bar0_.read64(bar0::NSSR);
+    }
+    std::uint64_t aqa() const
+    {
+        return bar0_.read64(bar0::AQA);
+    }
+    std::uint64_t asq() const
+    {
+        return bar0_.read64(bar0::ASQ);
+    }
+    std::uint64_t acq() const
+    {
+        return bar0_.read64(bar0::ACQ);
+    }
+    std::uint64_t cmbloc() const
+    {
+        return bar0_.read64(bar0::CMBLOC);
+    }
+    std::uint64_t cmbsz() const
+    {
+        return bar0_.read64(bar0::CMBSZ);
+    }
+
+    void intms(std::uint32_t value)
+    {
+        bar0_.write32(bar0::CAP, value);
+    }
+    void intmc(std::uint32_t value)
+    {
+        bar0_.write32(bar0::INTMC, value);
+    }
+    void cc(std::uint32_t value)
+    {
+        bar0_.write32(bar0::CC, value);
+    }
+    void nssr(std::uint32_t value)
+    {
+        bar0_.write32(bar0::NSSR, value);
+    }
+    void aqa(std::uint32_t value)
+    {
+        bar0_.write32(bar0::AQA, value);
+    }
+    void asq(std::uint64_t value)
+    {
+        bar0_.write64(bar0::ASQ, value);
+    }
+    void acq(std::uint64_t value)
+    {
+        bar0_.write64(bar0::ACQ, value);
+    }
+
+  private:
+    utils::MmioRegion bar0_;
 };
-
-static_assert(std::is_standard_layout_v<NvmeBar0>);
-static_assert(offsetof(NvmeBar0, vs) == 0x0008);
-static_assert(offsetof(NvmeBar0, intms) == 0x000C);
-static_assert(offsetof(NvmeBar0, cc) == 0x0014);
-static_assert(offsetof(NvmeBar0, csts) == 0x001C);
-static_assert(offsetof(NvmeBar0, asq) == 0x0028);
-static_assert(offsetof(NvmeBar0, acq) == 0x0030);
-static_assert(offsetof(NvmeBar0, cmbloc) == 0x0038);
 
 // Controller Capabilities
 namespace cap
