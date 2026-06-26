@@ -6,15 +6,38 @@
 namespace nvme
 {
 
-using DWRD = std::uint32_t;
+namespace admin
+{
+    enum class Opcode : std::uint8_t;
+}
+
 
 namespace sqe::cdw0
 {
-using OPC = utils::BitField<DWRD, 0, 8>;
+
+using OPC  = utils::BitField<DWRD, 0, 8>;
 using FUSE = utils::BitField<DWRD, 8, 2>;
 using PSDT = utils::BitField<DWRD, 14, 2>;
-using CID = utils::BitField<DWRD, 16, 16>;
-} // namespace sqe::cdw0
+using CID  = utils::BitField<DWRD, 16, 16>;
+
+enum class Psdt : std::uint8_t {
+    Prp = 0b00,
+    Sgl1 = 0b01,
+    Sgl2 = 0b10,
+};
+
+inline DWRD encode(admin::Opcode opc,
+                    std::uint16_t cid,
+                    Psdt psdt = Psdt::Prp) noexcept
+{
+    return utils::DwordBuilder<>{}
+        .set<OPC>(utils::to_underlying(opc))
+        .set<PSDT>(utils::to_underlying(psdt))
+        .set<CID>(cid)
+        .get();
+}
+} // namespace cdw0
+
 
 namespace cqe::cdw2
 {
@@ -32,6 +55,12 @@ using STATUS = utils::BitField<DWRD, 17, 15>;
 struct DataPointer {
     std::uint64_t prp1;
     std::uint64_t prp2;
+
+    static constexpr DataPointer prp(
+            std::uint64_t p1, std::uint64_t p2 = 0) noexcept
+    {
+        return DataPointer{.prp1 = p1, .prp2 = p2};
+    }
 };
 
 struct CommonCommand {
@@ -47,6 +76,13 @@ struct CommonCommand {
     DWRD cdw13;
     DWRD cdw14;
     DWRD cdw15;
+
+    static CommonCommand build(admin::Opcode opc, std::uint16_t cid)
+    {
+        CommonCommand c{};
+        c.cdw0 = sqe::cdw0::encode(opc, cid);
+        return c;
+    }
 };
 
 struct CompletionEntry {
@@ -114,6 +150,8 @@ inline std::uint16_t sqhd(const CompletionEntry &c)
 
 // check props
 static_assert(sizeof(DWRD) == 4);
+static_assert(sizeof(DataPointer) == 16);
+
 static_assert(sizeof(CommonCommand) == 64);
 
 static_assert(std::is_standard_layout_v<CommonCommand>);
