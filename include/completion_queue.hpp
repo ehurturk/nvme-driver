@@ -4,7 +4,7 @@
 #include <optional>
 #include <cstring>
 
-#include "dma_memory.hpp"
+#include "dma_memory_view.hpp"
 #include "traits.hpp"
 #include "lifetime.hpp"
 #include "queue_entry.hpp"
@@ -31,8 +31,8 @@ class CompletionQueue
     static_assert(depth > 1);
     static_assert(depth <= 65536);
 
-    CompletionQueue(DmaMemory mem, QueueHardwareContext context)
-            : memory_{std::move(mem)}, queue_id_{context.queue_id},
+    CompletionQueue(DmaMemoryView mem, QueueHardwareContext context)
+            : memory_{mem}, queue_id_{context.queue_id},
               doorbell_{context.cq_head_dbell}, expected_bit_{1}
     {
     }
@@ -46,7 +46,7 @@ class CompletionQueue
         //        Expecting phase: 1
 
         // 1) Peek at the CQE at head slot
-        std::byte *dst = memory_.uva() + head_ * sizeof(Entry);
+        std::byte *dst = memory_.uva + head_ * sizeof(Entry);
 
         Entry *e = compat::load_object_from_bytes<Entry>(dst);
 
@@ -83,7 +83,7 @@ class CompletionQueue
     }
 
   private:
-    DmaMemory memory_;
+    DmaMemoryView memory_;
     std::uint16_t queue_id_;
     volatile std::uint32_t *doorbell_;
     std::size_t head_{};

@@ -118,21 +118,20 @@ namespace constants
 // Some of the constants here are taken from linux:
 // include/linux/nvme.h
 
-// 0s based
-constexpr static size_t AQ_DEPTH = 32;
+static constexpr size_t AQ_DEPTH = 32;
 static_assert(AQ_DEPTH <= 4096 && AQ_DEPTH > 0);
 
-constexpr static size_t IO_DEPTH = 1024;
+static constexpr size_t IO_DEPTH = 1024;
 
 // For the queue entry size constants,
 // the NVMe spec mandates that "the value
 // is in bytes and is specified as a power of
 // two (2^n)."
-constexpr static size_t ADM_SQES = 6;
-constexpr static size_t ADM_CQES = 4;
+static constexpr size_t ADM_SQES = 6;
+static constexpr size_t ADM_CQES = 4;
 
-constexpr static size_t IO_SQES = 6;
-constexpr static size_t IO_CQES = 4;
+static constexpr size_t IO_SQES = 6;
+static constexpr size_t IO_CQES = 4;
 } // namespace constants
 
 namespace bar0

@@ -295,12 +295,6 @@ int main()
 
 
 // TODO:
-// 1) Implement ring buffer in Queue with read/write heads.
-// 2) Implement necessary functions in QueuePair: it is the main structure.
-//        - think about what is the main differentiation of admin and IO queues, is it
-//          simple enough to be abstracted away with AdminQueue / IO Queue both extending
-//          the Queue class via CRTP?
-// 3)
 // 1) Create admin queues (SQ, CQ) in host memory
 // 2) Rethink about buffer allocaion & DMA'ing it.
 //     - separate buffers for SQ, CQ?

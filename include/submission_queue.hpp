@@ -1,12 +1,11 @@
 #pragma once
 
-#include <utility>
 #include <atomic>
 #include <bit>
 #include <cstring>
 
 #include "traits.hpp"
-#include "dma_memory.hpp"
+#include "dma_memory_view.hpp"
 
 namespace nvme
 {
@@ -30,9 +29,9 @@ class SubmissionQueue
     static_assert(depth > 1);
     static_assert(depth <= 65536);
 
-    explicit SubmissionQueue(
-            DmaMemory dma_region, QueueHardwareContext context)
-            : dma_region_{std::move(dma_region)}, queue_id_{context.queue_id},
+    SubmissionQueue(
+            DmaMemoryView dma_region, QueueHardwareContext context)
+            : dma_region_{dma_region}, queue_id_{context.queue_id},
               doorbell_{context.sq_tail_dbell}
     {
     }
@@ -44,7 +43,7 @@ class SubmissionQueue
             return false;
 
         // copy the entry to the desired location
-        auto *dst = dma_region_.uva() + tail_ * sizeof(Entry);
+        auto *dst = dma_region_.uva + tail_ * sizeof(Entry);
         std::memcpy(dst, &e, sizeof(Entry));
 
         // ensure slot is written before tail update
@@ -65,7 +64,7 @@ class SubmissionQueue
             return false;
 
         // copy the entry to the desired location
-        auto *dst = dma_region_.uva() + tail_ * sizeof(Entry);
+        auto *dst = dma_region_.uva + tail_ * sizeof(Entry);
         std::memcpy(dst, &e, sizeof(Entry));
 
         // ensure slot is written before tail update
@@ -107,7 +106,7 @@ class SubmissionQueue
     }
 
   private:
-    DmaMemory dma_region_;
+    DmaMemoryView dma_region_;
     std::uint16_t queue_id_;
     volatile std::uint32_t *doorbell_;
     std::size_t tail_{};
