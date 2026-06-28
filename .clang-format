@@ -1,36 +1,66 @@
-# Linux / kernel-ish C/C++ formatting
 BasedOnStyle: LLVM
+Language: Cpp
+Standard: Latest
 
+# 1. Line Length
+# 120 is standard for modern C++ to accommodate templates and namespaces.
+ColumnLimit: 120
+
+# 2. Indentation & Tabs
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
+ContinuationIndentWidth: 8
+ConstructorInitializerIndentWidth: 8
 
-ColumnLimit: 80
+# 3. Brace Wrapping (Your Custom Preference)
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: true
+  AfterControlStatement: false # Keeps if, while, for braces on the same line
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterStruct: true
+  AfterUnion: true
+  AfterExternBlock: true
+  BeforeCatch: false
+  BeforeElse: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
 
-BreakBeforeBraces: Linux
-AllowShortIfStatementsOnASingleLine: false
-AllowShortLoopsOnASingleLine: false
-AllowShortFunctionsOnASingleLine: None
+# 4. Alignment
+# Extremely useful for reading large packets of data or struct declarations.
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignConsecutiveMacros: true
+AlignOperands: Align
+AlignTrailingComments: true
+AlignAfterOpenBracket: Align
 
-IndentCaseLabels: false
-IndentGotoLabels: false
+# 5. Idiomatic C++ Pointers and References
+# Shifting from C style (int *p) to C++ style (int* p).
+PointerAlignment: Left
+ReferenceAlignment: Left
 
-PointerAlignment: Right
-ReferenceAlignment: Right
+# 6. Modern C++20 / C++23 Handling
+# Ensures templates, concepts, and requires clauses don't become an unreadable mess.
+RequiresClausePosition: OwnLine
+IndentRequiresClause: true
+BreakBeforeConceptDeclarations: true
 
+# 7. Spaces and Parentheses
 SpaceBeforeParens: ControlStatements
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
 SpaceInEmptyParentheses: false
 
-SortIncludes: false
-ReflowComments: false
-
-AlignAfterOpenBracket: DontAlign
-AlignConsecutiveAssignments: false
-AlignConsecutiveDeclarations: false
-AlignOperands: false
-AlignTrailingComments: false
-
-ContinuationIndentWidth: 8
-ConstructorInitializerIndentWidth: 8
+# 8. Quality of Life Formatting
+# Automatically adds // namespace X to the end of namespaces.
+FixNamespaceComments: true
+SortIncludes: CaseSensitive
+ReflowComments: true
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None

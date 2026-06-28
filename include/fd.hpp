@@ -4,9 +4,6 @@
 
 #include <utility>
 
-namespace nvme
-{
-
 // RAII on fds
 class UniqueFd
 {
@@ -15,8 +12,7 @@ class UniqueFd
 
     UniqueFd() = default;
     explicit UniqueFd(int fd) : fd_{fd}
-    {
-    }
+    {}
 
     ~UniqueFd()
     {
@@ -24,14 +20,13 @@ class UniqueFd
             ::close(fd_);
     }
 
-    UniqueFd(const UniqueFd &) = delete;
-    UniqueFd &operator=(const UniqueFd &) = delete;
+    UniqueFd(const UniqueFd&)            = delete;
+    UniqueFd& operator=(const UniqueFd&) = delete;
 
-    UniqueFd(UniqueFd &&o) noexcept : fd_{std::exchange(o.fd_, nfd)}
-    {
-    }
+    UniqueFd(UniqueFd&& o) noexcept : fd_{std::exchange(o.fd_, nfd)}
+    {}
 
-    UniqueFd &operator=(UniqueFd &&o) noexcept
+    UniqueFd& operator=(UniqueFd&& o) noexcept
     {
         if (this != &o) {
             if (fd_ >= 0)
@@ -54,5 +49,3 @@ class UniqueFd
   private:
     int fd_{nfd};
 };
-
-} // namespace nvme

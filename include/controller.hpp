@@ -1,9 +1,9 @@
 #pragma once
 
-#include <print>
-#include <chrono>
-#include <thread>
 #include <assert.h>
+#include <chrono>
+#include <print>
+#include <thread>
 
 #include "nvme_spec.hpp"
 
@@ -14,14 +14,14 @@ using namespace std::chrono_literals;
 class Controller final
 {
   private:
-    static constexpr std::uint8_t CtlEn = 0b1;
+    static constexpr std::uint8_t CtlEn  = 0b1;
     static constexpr std::uint8_t CtlDis = 0b0;
 
   public:
     // bar0 must be a *mmap*ed memory of the nvme device
-    Controller(void *bar0) : ctl_space_{bar0}, timeout_{125ms}
+    Controller(void* bar0) : ctl_space_{bar0}, timeout_{125ms}
     {
-        auto vs = ctl_space_.vs();
+        auto vs    = ctl_space_.vs();
         auto minor = vs::MinorVersion::extract(vs);
         auto major = vs::MajorVersion::extract(vs);
 
@@ -77,7 +77,7 @@ class Controller final
             ccMps = capMPSMin;
             std::println("[INFO]: ccMps {} is out of bounds, setting it as "
                          "capMPSMin: {}",
-                    ccMps, capMPSMin);
+                         ccMps, capMPSMin);
         }
 
         // Set CC.CSS
@@ -95,8 +95,8 @@ class Controller final
 
         // Insert AS, MPS, CSS into CC
         auto cc = cc::AMS::insert(ctl_space_.cc(), ccAms);
-        cc = cc::MPS::insert(ctl_space_.cc(), ccMps);
-        cc = cc::CSS::insert(ctl_space_.cc(), ccCss);
+        cc      = cc::MPS::insert(ctl_space_.cc(), ccMps);
+        cc      = cc::CSS::insert(ctl_space_.cc(), ccCss);
 
         // Set CC.IOSQES / CC.IOCQES
         // For creating the admin queues, I will set IOSQES/IOCQES to standard
@@ -109,24 +109,22 @@ class Controller final
         // Setup AQA & ASQ & ACQ
 
         volatile std::uint32_t aqa = ctl_space_.aqa();
-        aqa = nvme::aqa::ASQS::insert(ctl_space_.aqa(), constants::AQ_DEPTH);
-        aqa = nvme::aqa::ACQS::insert(ctl_space_.aqa(), constants::AQ_DEPTH);
+        aqa                        = nvme::aqa::ASQS::insert(ctl_space_.aqa(), constants::AQ_DEPTH);
+        aqa                        = nvme::aqa::ACQS::insert(ctl_space_.aqa(), constants::AQ_DEPTH);
 
         // TODO: Populate adminQueue queues with IOVA and UVA.
         nvme::AdminQueuePair adminPair{};
 
-        volatile std::uint64_t asq = ctl_space_.asq();
-        std::uint64_t asqb = 0;
-        assert(asqb % (1 << ccMps) == 0 &&
-                "ASQB shall be memory page aligned (based on the value in "
-                "CC.MPS)");
+        volatile std::uint64_t asq  = ctl_space_.asq();
+        std::uint64_t          asqb = 0;
+        assert(asqb % (1 << ccMps) == 0 && "ASQB shall be memory page aligned (based on the value in "
+                                           "CC.MPS)");
         asq = nvme::asq::ASQB::insert(asq, asqb);
 
-        volatile uint64_t acq = ctl_space_.acq();
-        std::uint64_t acqb = 0;
-        assert(acqb % (1 << ccMps) == 0 &&
-                "ACQB shall be memory page aligned (based on the value in "
-                "CC.MPS)");
+        volatile uint64_t acq  = ctl_space_.acq();
+        std::uint64_t     acqb = 0;
+        assert(acqb % (1 << ccMps) == 0 && "ACQB shall be memory page aligned (based on the value in "
+                                           "CC.MPS)");
         acq = nvme::acq::ACQB::insert(acq, acqb);
 
         // TODO: should the cc values be written before AQA, ACQ, ASQ be written, or
@@ -140,8 +138,7 @@ class Controller final
     }
 
   private:
-    bool wait_for(
-            std::predicate auto &&predicate, std::chrono::milliseconds timeout)
+    bool wait_for(std::predicate auto&& predicate, std::chrono::milliseconds timeout)
     {
         auto deadline = std::chrono::steady_clock::now() + timeout;
 
@@ -162,7 +159,7 @@ class Controller final
     void fetch_timeout()
     {
         auto timeout_raw = cap::TIMEOUT::extract(ctl_space_.cap());
-        timeout_ = timeout_raw * 500ms;
+        timeout_         = timeout_raw * 500ms;
     }
 
     // en = 0b0 -> disable
@@ -187,7 +184,7 @@ class Controller final
     }
 
   private:
-    NVMeBar0 ctl_space_;
+    NVMeBar0                  ctl_space_;
     std::chrono::milliseconds timeout_;
 };
 

@@ -1,18 +1,17 @@
 #pragma once
 
 #include <atomic>
-#include <optional>
 #include <cstring>
+#include <optional>
 
 #include "dma_memory_view.hpp"
-#include "traits.hpp"
 #include "lifetime.hpp"
 #include "queue_entry.hpp"
+#include "traits.hpp"
 
 namespace nvme
 {
-template <class Kind, std::size_t N = QueueTraits<Kind>::depth>
-class CompletionQueue
+template <class Kind, std::size_t N = QueueTraits<Kind>::depth> class CompletionQueue
 {
   public:
     using Trait = QueueTraits<Kind>;
@@ -20,10 +19,8 @@ class CompletionQueue
 
     static constexpr std::size_t depth = N;
 
-    static_assert(
-            std::has_single_bit(depth), "Queue size must be a power of 2.");
-    static_assert(sizeof(Entry) == 16,
-            "Completion queue entry size must be 16 bytes.");
+    static_assert(std::has_single_bit(depth), "Queue size must be a power of 2.");
+    static_assert(sizeof(Entry) == 16, "Completion queue entry size must be 16 bytes.");
 
     // Check trivially copyable and standard layout for cheap copies & semantics
     static_assert(std::is_trivially_copyable_v<Entry>);
@@ -32,10 +29,8 @@ class CompletionQueue
     static_assert(depth <= 65536);
 
     CompletionQueue(DmaMemoryView mem, QueueHardwareContext context)
-            : memory_{mem}, queue_id_{context.queue_id},
-              doorbell_{context.cq_head_dbell}, expected_bit_{1}
-    {
-    }
+            : memory_{mem}, queue_id_{context.queue_id}, doorbell_{context.cq_head_dbell}, expected_bit_{1}
+    {}
 
     std::optional<Entry> poll()
     {
@@ -46,12 +41,12 @@ class CompletionQueue
         //        Expecting phase: 1
 
         // 1) Peek at the CQE at head slot
-        std::byte *dst = memory_.uva + head_ * sizeof(Entry);
+        std::byte* dst = memory_.uva + head_ * sizeof(Entry);
 
-        Entry *e = compat::load_object_from_bytes<Entry>(dst);
+        Entry* e = compat::load_object_from_bytes<Entry>(dst);
 
         std::uint16_t status = utils::ReadVolatile(e->status);
-        std::uint8_t phase = cqe::phase(status);
+        std::uint8_t  phase  = cqe::phase(status);
 
         if (phase != expected_bit_) {
             return std::nullopt;
@@ -74,7 +69,10 @@ class CompletionQueue
         return cqe;
     }
 
-    std::size_t head() const { return head_; }
+    std::size_t head() const
+    {
+        return head_;
+    }
 
   private:
     void ring_head_doorbell()
@@ -83,10 +81,10 @@ class CompletionQueue
     }
 
   private:
-    DmaMemoryView memory_;
-    std::uint16_t queue_id_;
-    volatile std::uint32_t *doorbell_;
-    std::size_t head_{};
+    DmaMemoryView           memory_;
+    std::uint16_t           queue_id_;
+    volatile std::uint32_t* doorbell_;
+    std::size_t             head_{};
 
     // the expected phase tag bit, initially starts as 1 for the very first CQE.
     std::uint8_t expected_bit_;

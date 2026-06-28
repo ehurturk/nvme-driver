@@ -12,7 +12,7 @@ namespace layout
 namespace abort_cdw10
 {
 using SQID = utils::BitField<DWRD, 0, 16>;
-using CID = utils::BitField<DWRD, 16, 16>;
+using CID  = utils::BitField<DWRD, 16, 16>;
 
 inline DWRD encode(std::uint16_t sqid, std::uint16_t cid) noexcept
 {
@@ -22,7 +22,7 @@ inline DWRD encode(std::uint16_t sqid, std::uint16_t cid) noexcept
 
 namespace create_io_q_cdw10
 {
-using QID = utils::BitField<DWRD, 0, 16>;
+using QID   = utils::BitField<DWRD, 0, 16>;
 using QSIZE = utils::BitField<DWRD, 16, 16>;
 
 // NOTE: Qsize should be 1s based
@@ -36,12 +36,11 @@ inline DWRD encode(std::uint16_t qid, std::uint16_t qsize) noexcept
 
 namespace create_io_cq_cdw11
 {
-using PC = utils::BitField<DWRD, 0, 1>;
+using PC  = utils::BitField<DWRD, 0, 1>;
 using IEN = utils::BitField<DWRD, 1, 1>;
-using IV = utils::BitField<DWRD, 16, 16>;
+using IV  = utils::BitField<DWRD, 16, 16>;
 
-inline DWRD encode(bool physically_contiguous, bool interrupts_enabled,
-        std::uint16_t interrupt_vector) noexcept
+inline DWRD encode(bool physically_contiguous, bool interrupts_enabled, std::uint16_t interrupt_vector) noexcept
 {
     return utils::DwordBuilder<>{}
             .set<PC>(physically_contiguous)
@@ -51,21 +50,21 @@ inline DWRD encode(bool physically_contiguous, bool interrupts_enabled,
 }
 } // namespace create_io_cq_cdw11
 
-enum class QueuePriority : std::uint8_t {
+enum class QueuePriority : std::uint8_t
+{
     Urgent = 0b00,
-    High = 0b01,
+    High   = 0b01,
     Medium = 0b10,
-    Low = 0b11,
+    Low    = 0b11,
 };
 
 namespace create_io_sq_cdw11
 {
-using PC = utils::BitField<DWRD, 0, 1>;
+using PC    = utils::BitField<DWRD, 0, 1>;
 using QPRIO = utils::BitField<DWRD, 1, 2>;
-using CQID = utils::BitField<DWRD, 16, 16>;
+using CQID  = utils::BitField<DWRD, 16, 16>;
 
-inline DWRD encode(bool physically_contiguous, QueuePriority priority,
-        std::uint16_t cqid) noexcept
+inline DWRD encode(bool physically_contiguous, QueuePriority priority, std::uint16_t cqid) noexcept
 {
     return utils::DwordBuilder<>{}
             .set<PC>(physically_contiguous)
@@ -87,7 +86,7 @@ inline DWRD encode(std::uint16_t nvmsetid) noexcept
 
 namespace identify_cdw10
 {
-using CNS = utils::BitField<DWRD, 0, 8>;
+using CNS   = utils::BitField<DWRD, 0, 8>;
 using CNTID = utils::BitField<DWRD, 16, 16>;
 
 inline DWRD encode(std::uint8_t cns, std::uint16_t cntid) noexcept
@@ -99,7 +98,7 @@ inline DWRD encode(std::uint8_t cns, std::uint16_t cntid) noexcept
 namespace identify_cdw11
 {
 using CNSSID = utils::BitField<DWRD, 0, 16>;
-using CSI = utils::BitField<DWRD, 24, 8>;
+using CSI    = utils::BitField<DWRD, 24, 8>;
 
 inline DWRD encode(std::uint16_t cnssid, std::uint8_t csi) noexcept
 {

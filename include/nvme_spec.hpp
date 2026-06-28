@@ -100,17 +100,19 @@ also polls on the phase bit.
 namespace nvme
 {
 
-enum class ControllerType : uint8_t {
-    NVME_CTL_IO = 1, // io controller (standard NVMe controller)
-    NVME_CTL_DISC = 2, // discovery controller (NVMe-oF specific)
-    NVME_CTL_ADMIN = 3 // admin controller (opt)
+enum class ControllerType : uint8_t
+{
+    NVME_CTL_IO    = 1, // io controller (standard NVMe controller)
+    NVME_CTL_DISC  = 2, // discovery controller (NVMe-oF specific)
+    NVME_CTL_ADMIN = 3  // admin controller (opt)
 };
 
-enum class TransportType : uint8_t {
-    NVME_TRTYPE_PCI = 0, // PCI/PCIe
+enum class TransportType : uint8_t
+{
+    NVME_TRTYPE_PCI  = 0, // PCI/PCIe
     NVME_TRTYPE_RDMA = 1, // RDMA
-    NVME_TRTYPE_FC = 2, // Fibre Channel
-    NVME_TRTYPE_TCP = 3 // TCP
+    NVME_TRTYPE_FC   = 2, // Fibre Channel
+    NVME_TRTYPE_TCP  = 3  // TCP
 };
 
 namespace constants
@@ -136,26 +138,25 @@ static constexpr size_t IO_CQES = 4;
 
 namespace bar0
 {
-constexpr std::size_t CAP = 0x00;
-constexpr std::size_t VS = 0x08;
-constexpr std::size_t INTMS = 0x0c;
-constexpr std::size_t INTMC = 0x10;
-constexpr std::size_t CC = 0x14;
-constexpr std::size_t CSTS = 0x1c;
-constexpr std::size_t NSSR = 0x20;
-constexpr std::size_t AQA = 0x24;
-constexpr std::size_t ASQ = 0x28;
-constexpr std::size_t ACQ = 0x30;
+constexpr std::size_t CAP    = 0x00;
+constexpr std::size_t VS     = 0x08;
+constexpr std::size_t INTMS  = 0x0c;
+constexpr std::size_t INTMC  = 0x10;
+constexpr std::size_t CC     = 0x14;
+constexpr std::size_t CSTS   = 0x1c;
+constexpr std::size_t NSSR   = 0x20;
+constexpr std::size_t AQA    = 0x24;
+constexpr std::size_t ASQ    = 0x28;
+constexpr std::size_t ACQ    = 0x30;
 constexpr std::size_t CMBLOC = 0x38;
-constexpr std::size_t CMBSZ = 0x3c;
+constexpr std::size_t CMBSZ  = 0x3c;
 } // namespace bar0
 
 class NVMeBar0
 {
   public:
-    explicit NVMeBar0(void *base) : bar0_{base}
-    {
-    }
+    explicit NVMeBar0(void* base) : bar0_{base}
+    {}
 
     std::uint64_t cap() const
     {
@@ -245,24 +246,23 @@ namespace cap
 using MQES = utils::BitField<uint64_t, 0, 16>; // Max Queue Entries
 // 1: Vendor specific
 // 0: Weighted Round Robinw with Urgent Priority Class
-using AMS = utils::BitField<uint64_t, 17, 2>; // Arbitration Mechanism Supported
+using AMS     = utils::BitField<uint64_t, 17, 2>; // Arbitration Mechanism Supported
 using TIMEOUT = utils::BitField<uint64_t, 24, 8>; // Timeout (500ms units)
-using DSTR = utils::BitField<uint64_t, 32, 4>; // Doorbell Stride
-using NSSRS = utils::BitField<uint64_t, 36, 1>; // NVM Subsystem Reset
-using CSS = utils::BitField<uint64_t, 37, 8>; // Command Sets Supported
-using MPSMin = utils::BitField<uint64_t, 48, 4>; // Min Page Size (2^(12+n))
-using MPSMax = utils::BitField<uint64_t, 52, 4>; // Max Page Size
-using PMRS =
-        utils::BitField<uint64_t, 56, 1>; // Persistent Memory Region Supported
-using CMBS = utils::BitField<uint64_t, 57, 1>; // CMB Supported
+using DSTR    = utils::BitField<uint64_t, 32, 4>; // Doorbell Stride
+using NSSRS   = utils::BitField<uint64_t, 36, 1>; // NVM Subsystem Reset
+using CSS     = utils::BitField<uint64_t, 37, 8>; // Command Sets Supported
+using MPSMin  = utils::BitField<uint64_t, 48, 4>; // Min Page Size (2^(12+n))
+using MPSMax  = utils::BitField<uint64_t, 52, 4>; // Max Page Size
+using PMRS    = utils::BitField<uint64_t, 56, 1>; // Persistent Memory Region Supported
+using CMBS    = utils::BitField<uint64_t, 57, 1>; // CMB Supported
 
 namespace css
 {
 // Mask the Command Sets Supported field with these
 // bitmasks
 //     e.g. capCss & NCSS_BIT | capCss & IOCSS_BIT
-constexpr uint8_t NCSS_BIT = 0x1;
-constexpr uint8_t IOCSS_BIT = 0x1 << 6;
+constexpr uint8_t NCSS_BIT    = 0x1;
+constexpr uint8_t IOCSS_BIT   = 0x1 << 6;
 constexpr uint8_t NOIOCSS_BIT = 0x1 << 7;
 } // namespace css
 
@@ -272,26 +272,24 @@ constexpr uint8_t NOIOCSS_BIT = 0x1 << 7;
 namespace vs
 {
 using TertiaryVersion = utils::BitField<uint32_t, 0, 8>;
-using MinorVersion = utils::BitField<uint32_t, 8, 8>;
-using MajorVersion = utils::BitField<uint32_t, 16, 16>;
+using MinorVersion    = utils::BitField<uint32_t, 8, 8>;
+using MajorVersion    = utils::BitField<uint32_t, 16, 16>;
 } // namespace vs
 
 // Controller Configuration
 namespace cc
 {
-using EN = utils::BitField<uint32_t, 0, 1>; // Enable
-using CSS = utils::BitField<uint32_t, 4, 3>; // IO Command Set Selected
-using MPS = utils::BitField<uint32_t, 7, 4>; // Memory Page Size
-using AMS = utils::BitField<uint32_t, 11, 3>; // Arbitration Mechanism Selected
-using SHN = utils::BitField<uint32_t, 14, 2>; // Shutdown Notification
-using IOSQES =
-        utils::BitField<uint32_t, 16, 4>; // IO Submission Queue Entry Size
-using IOCQES =
-        utils::BitField<uint32_t, 20, 4>; // IO Completion Queue Entry Size
+using EN     = utils::BitField<uint32_t, 0, 1>;  // Enable
+using CSS    = utils::BitField<uint32_t, 4, 3>;  // IO Command Set Selected
+using MPS    = utils::BitField<uint32_t, 7, 4>;  // Memory Page Size
+using AMS    = utils::BitField<uint32_t, 11, 3>; // Arbitration Mechanism Selected
+using SHN    = utils::BitField<uint32_t, 14, 2>; // Shutdown Notification
+using IOSQES = utils::BitField<uint32_t, 16, 4>; // IO Submission Queue Entry Size
+using IOCQES = utils::BitField<uint32_t, 20, 4>; // IO Completion Queue Entry Size
 namespace css
 {
-constexpr uint8_t NCSS = 0b000;
-constexpr uint8_t IOCSS = 0b110;
+constexpr uint8_t NCSS    = 0b000;
+constexpr uint8_t IOCSS   = 0b110;
 constexpr uint8_t NOIOCSS = 0b111;
 } // namespace css
 } // namespace cc
@@ -320,40 +318,42 @@ using ACQB = utils::BitField<uint64_t, 12, 52>;
 namespace command
 {
 
-enum class Opcode : uint8_t {
-    Flush = 0x00,
-    Write = 0x01,
-    Read = 0x02,
+enum class Opcode : uint8_t
+{
+    Flush            = 0x00,
+    Write            = 0x01,
+    Read             = 0x02,
     WriteUncorrected = 0x04,
-    Compare = 0x05,
-    WriteZeroes = 0x08,
-    Dsm = 0X09,
-    Verify = 0X0C,
-    ResvRegister = 0x0D,
-    ResvReport = 0X0E,
+    Compare          = 0x05,
+    WriteZeroes      = 0x08,
+    Dsm              = 0X09,
+    Verify           = 0X0C,
+    ResvRegister     = 0x0D,
+    ResvReport       = 0X0E,
 };
 
-enum class AdminOpcode : uint8_t {
-    DeleteSq = 0x00,
-    CreateSq = 0x01,
-    GetLogPage = 0x02,
-    DeleteCq = 0x04,
-    CreateCq = 0x05,
-    Identify = 0x06,
-    AbortCmd = 0x08,
-    SetFeatures = 0x09,
-    GetFeatures = 0x0a,
-    AsyncEvent = 0x0c,
-    NsManagement = 0x0d,
-    DeviceSelfTest = 0x14,
-    NsAttach = 0x15,
-    KeepAlive = 0x18,
-    DirectiveSend = 0x19,
-    DirectiveReceive = 0x1a,
+enum class AdminOpcode : uint8_t
+{
+    DeleteSq                 = 0x00,
+    CreateSq                 = 0x01,
+    GetLogPage               = 0x02,
+    DeleteCq                 = 0x04,
+    CreateCq                 = 0x05,
+    Identify                 = 0x06,
+    AbortCmd                 = 0x08,
+    SetFeatures              = 0x09,
+    GetFeatures              = 0x0a,
+    AsyncEvent               = 0x0c,
+    NsManagement             = 0x0d,
+    DeviceSelfTest           = 0x14,
+    NsAttach                 = 0x15,
+    KeepAlive                = 0x18,
+    DirectiveSend            = 0x19,
+    DirectiveReceive         = 0x1a,
     VirtualizationManagement = 0x1c,
-    NvmeMiSend = 0x1d,
-    NvmeMiRecv = 0x1e,
-    DbBufConfig = 0x7C,
+    NvmeMiSend               = 0x1d,
+    NvmeMiRecv               = 0x1e,
+    DbBufConfig              = 0x7C,
 };
 
 } // namespace command
