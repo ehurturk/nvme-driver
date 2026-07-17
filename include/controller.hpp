@@ -6,11 +6,14 @@
 #include <thread>
 
 #include "nvme_spec.hpp"
+#include "queue_pair.hpp"
+#include "vfio_container.hpp"
 
 namespace nvme
 {
 
 using namespace std::chrono_literals;
+
 class Controller final
 {
   private:
@@ -19,7 +22,11 @@ class Controller final
 
   public:
     // bar0 must be a *mmap*ed memory of the nvme device
-    Controller(void* bar0) : ctl_space_{bar0}, timeout_{125ms}
+    Controller(VfioContainer& container, NVMeBar0 bar0)
+            : container_{container}, ctl_space_{bar0},
+              admin_queue_pair_{container_, ctl_space_.bar0(),
+                                static_cast<std::uint8_t>(cap::DSTR::extract(ctl_space_.cap()))},
+              timeout_{125ms}
     {
         auto vs    = ctl_space_.vs();
         auto minor = vs::MinorVersion::extract(vs);
@@ -113,16 +120,16 @@ class Controller final
         aqa                        = nvme::aqa::ACQS::insert(ctl_space_.aqa(), constants::AQ_DEPTH);
 
         // TODO: Populate adminQueue queues with IOVA and UVA.
-        nvme::AdminQueuePair adminPair{};
+        auto                 dstrd = cap::DSTR::extract(ctl_space_.cap());
 
         volatile std::uint64_t asq  = ctl_space_.asq();
-        std::uint64_t          asqb = 0;
+        std::uint64_t          asqb = admin_queue_pair_.sq_iova();
         assert(asqb % (1 << ccMps) == 0 && "ASQB shall be memory page aligned (based on the value in "
                                            "CC.MPS)");
         asq = nvme::asq::ASQB::insert(asq, asqb);
 
         volatile uint64_t acq  = ctl_space_.acq();
-        std::uint64_t     acqb = 0;
+        std::uint64_t     acqb = admin_queue_pair_.cq_iova();
         assert(acqb % (1 << ccMps) == 0 && "ACQB shall be memory page aligned (based on the value in "
                                            "CC.MPS)");
         acq = nvme::acq::ACQB::insert(acq, acqb);
@@ -184,7 +191,9 @@ class Controller final
     }
 
   private:
-    NVMeBar0                  ctl_space_;
+    VfioContainer&            container_;
+    NVMeBar0&                 ctl_space_;
+    AdminQueuePair            admin_queue_pair_;
     std::chrono::milliseconds timeout_;
 };
 

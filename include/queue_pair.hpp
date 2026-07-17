@@ -4,6 +4,7 @@
 
 #include "completion_queue.hpp"
 #include "dma_memory.hpp"
+#include "nvme_spec.hpp"
 #include "submission_queue.hpp"
 #include "traits.hpp"
 
@@ -18,16 +19,17 @@ namespace nvme
 class AdminQueuePair
 {
   private:
-    static constexpr size_t AQ_ID    = 0x0;
-    static constexpr size_t AQ_DEPTH = 32; // taken from linux
-                                           // kernel nvme driver
-  public:
-    AdminQueuePair(void* bar0_base_addr, std::uint8_t dstrd)
-            : memory_{0}, sq_{memory_, create_hardware_context(bar0_base_addr, dstrd)},
-              cq_{memory_, create_hardware_context(bar0_base_addr, dstrd)}
+        static constexpr size_t AQ_ID = 0x0;
+
+    public:
+        // TODO: give different dma memory views to sq_ and cq_ based on subview?
+    AdminQueuePair(VfioContainer& container, void* bar0_base_addr, std::uint8_t dstrd)
+        : memory_{container, constants::AQ_DEPTH * (constants::ADM_CQES + constants::ADM_SQES)},
+          sq_{DmaMemoryView{memory_}, create_hardware_context(bar0_base_addr, dstrd)},
+          cq_{DmaMemoryView{memory_}, create_hardware_context(bar0_base_addr, dstrd)}
     {}
 
-    ~AdminQueuePair();
+    ~AdminQueuePair() = default;
 
     AdminQueuePair(const AdminQueuePair&)            = delete;
     AdminQueuePair& operator=(const AdminQueuePair&) = delete;
@@ -49,7 +51,7 @@ class AdminQueuePair
     {
         QueueHardwareContext ctx{};
         ctx.queue_id      = AQ_ID;
-        auto* base        = static_cast<std::byte*>(bar0_base_addr);
+        auto* base = static_cast<std::byte*>(bar0_base_addr);
         ctx.sq_tail_dbell = reinterpret_cast<volatile std::uint32_t*>(base + 0x1000);
         ctx.cq_head_dbell = reinterpret_cast<volatile std::uint32_t*>(base + 0x1000 + (4u << dstrd));
         return ctx;
@@ -57,20 +59,24 @@ class AdminQueuePair
 
     static constexpr std::size_t sq_bytes()
     {
-        return AQ_DEPTH * (1 << constants::ADM_SQES);
+        return constants::AQ_DEPTH * (1 << constants::ADM_SQES);
     }
+
     static constexpr std::size_t cq_bytes()
     {
-        return AQ_DEPTH * (1 << constants::ADM_CQES);
+        return constants::AQ_DEPTH * (1 << constants::ADM_CQES);
     }
+
     static constexpr std::size_t sq_region_bytes()
     {
-        return page_round_up(sq_bytes());
+        return utils::page_round_up(sq_bytes());
     }
+
     static constexpr std::size_t cq_region_bytes()
     {
-        return page_round_up(cq_bytes());
+        return utils::page_round_up(cq_bytes());
     }
+
     static constexpr std::size_t region_bytes()
     {
         return sq_region_bytes() + cq_region_bytes();

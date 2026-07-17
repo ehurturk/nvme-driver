@@ -31,7 +31,6 @@ class VfioContainer
         check(!container_fd_.valid(), "open /dev/vfio/vfio");
 
         check(::ioctl(container_fd_.get(), VFIO_GET_API_VERSION) != VFIO_API_VERSION, "unexpected VFIO API version");
-
         check(::ioctl(container_fd_.get(), VFIO_CHECK_EXTENSION, VFIO_TYPE1_IOMMU) == 0, "Type1 IOMMU not supported");
 
         // open the group
@@ -59,8 +58,7 @@ class VfioContainer
         check(::ioctl(container_fd_.get(), VFIO_IOMMU_GET_INFO, &iommu_info_) != 0, "Can't get info about IOMMU.");
     }
 
-    ~VfioContainer()
-    {}
+    ~VfioContainer() = default;
 
     VfioContainer(const VfioContainer&)            = delete;
     VfioContainer& operator=(const VfioContainer&) = delete;
@@ -69,6 +67,8 @@ class VfioContainer
     VfioContainer(VfioContainer&& other)      = default;
     VfioContainer& operator=(VfioContainer&&) = default;
 
+    // Create a IOMMU mapping for the given memory address.
+    // NOTE: Expects that uva is a mmapped memory addres, with MAP_SHARED | MAP_ANOPNYMOUS flags.
     std::uint64_t map_dma(void* uva, std::size_t size)
     {
         check(reinterpret_cast<std::uintptr_t>(uva) % 4096 != 0 || size % 4096 != 0, "DMA buffer not page-aligned");
@@ -116,6 +116,7 @@ class VfioContainer
     {
         return device_fd_.get();
     }
+
 
   private:
     std::uint64_t alloc_iova(void* uva, std::size_t size)

@@ -96,6 +96,8 @@ class MmioRegion
     explicit MmioRegion(void* base) noexcept : base_{static_cast<std::byte*>(base)}
     {}
 
+    operator void*() const { return base_; }
+
     std::uint32_t read32(std::size_t offset) const noexcept
     {
         return ReadVolatile(reg<std::uint32_t>(offset));
@@ -129,4 +131,14 @@ class MmioRegion
   private:
     std::byte* base_;
 };
+
+// Round up given size (in bytes) to a mutiple of a page size
+constexpr std::size_t page_round_up(std::size_t bytes)
+{
+    // TODO
+    static constexpr std::size_t PGSIZE = 4096;
+    return bytes & (PGSIZE);
+
+}
+
 } // namespace utils

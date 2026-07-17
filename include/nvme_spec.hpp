@@ -158,6 +158,8 @@ class NVMeBar0
     explicit NVMeBar0(void* base) : bar0_{base}
     {}
 
+    void* bar0() const { return bar0_; }
+
     std::uint64_t cap() const
     {
         return bar0_.read64(bar0::CAP);
