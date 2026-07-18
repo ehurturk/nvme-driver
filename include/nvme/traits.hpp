@@ -1,8 +1,8 @@
 #pragma once
 
-#include <cstdint>
+#include <cstddef>
 
-#include "nvme_spec.hpp"
+#include "nvme/spec.hpp"
 
 namespace nvme
 {
@@ -12,30 +12,22 @@ struct AdminQueueKind
 struct IOQueueKind
 {};
 
-// fwd declarations
-struct CommonCommand;   // implemented in queue_entry.hpp
-struct CompletionEntry; // implemented in queue_entry.hpp
-
-struct QueueHardwareContext
-{
-    std::uint16_t           queue_id;
-    volatile std::uint32_t* sq_tail_dbell;
-    volatile std::uint32_t* cq_head_dbell;
-};
+struct CommonCommand;
+struct CompletionEntry;
 
 template <class Kind> struct QueueTraits;
 
 template <> struct QueueTraits<AdminQueueKind>
 {
     using SubmissionEntry              = CommonCommand;
-    using CompletionEntry              = CompletionEntry;
+    using CompletionEntry              = ::nvme::CompletionEntry;
     static constexpr std::size_t depth = constants::AQ_DEPTH;
 };
 
 template <> struct QueueTraits<IOQueueKind>
 {
     using SubmissionEntry              = CommonCommand;
-    using CompletionEntry              = CompletionEntry;
+    using CompletionEntry              = ::nvme::CompletionEntry;
     static constexpr std::size_t depth = constants::IO_DEPTH;
 };
 } // namespace nvme

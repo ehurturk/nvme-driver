@@ -4,6 +4,9 @@
 
 #include <utility>
 
+namespace os
+{
+
 // RAII on fds
 class UniqueFd
 {
@@ -49,3 +52,5 @@ class UniqueFd
   private:
     int fd_{nfd};
 };
+
+} // namespace os

@@ -2,7 +2,7 @@
 
 #include <assert.h>
 
-#include "../utils.hpp"
+#include "utils.hpp"
 
 namespace nvme
 {
@@ -108,7 +108,7 @@ inline DWRD encode(std::uint16_t cnssid, std::uint8_t csi) noexcept
 
 namespace delete_io_q_cdw10
 {
-// Identifier of the queue (SQ/DQ) to be deleted.
+// Identifier of the queue (SQ/DQ) to be deleted
 using QID = utils::BitField<DWRD, 0, 16>;
 
 inline DWRD encode(std::uint16_t qid) noexcept

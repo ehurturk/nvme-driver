@@ -2,8 +2,8 @@
 
 #include <assert.h>
 
-#include "../queue_entry.hpp"
-#include "../utils.hpp"
+#include "nvme/queue_entry.hpp"
+#include "utils.hpp"
 
 namespace nvme
 {

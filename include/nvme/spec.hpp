@@ -1,9 +1,7 @@
 #pragma once
 
-#include <stdint.h>
-
 #include <cstddef>
-#include <type_traits>
+#include <cstdint>
 
 #include "utils.hpp"
 
@@ -100,42 +98,27 @@ also polls on the phase bit.
 namespace nvme
 {
 
-enum class ControllerType : uint8_t
-{
-    NVME_CTL_IO    = 1, // io controller (standard NVMe controller)
-    NVME_CTL_DISC  = 2, // discovery controller (NVMe-oF specific)
-    NVME_CTL_ADMIN = 3  // admin controller (opt)
-};
-
-enum class TransportType : uint8_t
-{
-    NVME_TRTYPE_PCI  = 0, // PCI/PCIe
-    NVME_TRTYPE_RDMA = 1, // RDMA
-    NVME_TRTYPE_FC   = 2, // Fibre Channel
-    NVME_TRTYPE_TCP  = 3  // TCP
-};
-
 namespace constants
 {
-// Some of the constants here are taken from linux:
 // include/linux/nvme.h
 
-static constexpr size_t AQ_DEPTH = 32;
+static constexpr std::size_t AQ_DEPTH = 32;
 static_assert(AQ_DEPTH <= 4096 && AQ_DEPTH > 0);
 
-static constexpr size_t IO_DEPTH = 1024;
+static constexpr std::size_t IO_DEPTH = 1024;
 
 // For the queue entry size constants,
-// the NVMe spec mandates that "the value
+// the NVMe spec says "the value
 // is in bytes and is specified as a power of
 // two (2^n)."
-static constexpr size_t ADM_SQES = 6;
-static constexpr size_t ADM_CQES = 4;
+static constexpr std::size_t ADM_SQES = 6;
+static constexpr std::size_t ADM_CQES = 4;
 
-static constexpr size_t IO_SQES = 6;
-static constexpr size_t IO_CQES = 4;
+static constexpr std::size_t IO_SQES = 6;
+static constexpr std::size_t IO_CQES = 4;
 } // namespace constants
 
+// Register offsets in BAR0
 namespace bar0
 {
 constexpr std::size_t CAP    = 0x00;
@@ -150,97 +133,9 @@ constexpr std::size_t ASQ    = 0x28;
 constexpr std::size_t ACQ    = 0x30;
 constexpr std::size_t CMBLOC = 0x38;
 constexpr std::size_t CMBSZ  = 0x3c;
+
+constexpr std::size_t DOORBELL_BASE = 0x1000;
 } // namespace bar0
-
-class NVMeBar0
-{
-  public:
-    explicit NVMeBar0(void* base) : bar0_{base}
-    {}
-
-    void* bar0() const { return bar0_; }
-
-    std::uint64_t cap() const
-    {
-        return bar0_.read64(bar0::CAP);
-    }
-    std::uint64_t vs() const
-    {
-        return bar0_.read64(bar0::VS);
-    }
-    std::uint64_t intms() const
-    {
-        return bar0_.read64(bar0::INTMS);
-    }
-    std::uint64_t intmc() const
-    {
-        return bar0_.read64(bar0::INTMC);
-    }
-    std::uint64_t cc() const
-    {
-        return bar0_.read64(bar0::CC);
-    }
-    std::uint64_t csts() const
-    {
-        return bar0_.read64(bar0::CSTS);
-    }
-    std::uint64_t nssr() const
-    {
-        return bar0_.read64(bar0::NSSR);
-    }
-    std::uint64_t aqa() const
-    {
-        return bar0_.read64(bar0::AQA);
-    }
-    std::uint64_t asq() const
-    {
-        return bar0_.read64(bar0::ASQ);
-    }
-    std::uint64_t acq() const
-    {
-        return bar0_.read64(bar0::ACQ);
-    }
-    std::uint64_t cmbloc() const
-    {
-        return bar0_.read64(bar0::CMBLOC);
-    }
-    std::uint64_t cmbsz() const
-    {
-        return bar0_.read64(bar0::CMBSZ);
-    }
-
-    void intms(std::uint32_t value)
-    {
-        bar0_.write32(bar0::CAP, value);
-    }
-    void intmc(std::uint32_t value)
-    {
-        bar0_.write32(bar0::INTMC, value);
-    }
-    void cc(std::uint32_t value)
-    {
-        bar0_.write32(bar0::CC, value);
-    }
-    void nssr(std::uint32_t value)
-    {
-        bar0_.write32(bar0::NSSR, value);
-    }
-    void aqa(std::uint32_t value)
-    {
-        bar0_.write32(bar0::AQA, value);
-    }
-    void asq(std::uint64_t value)
-    {
-        bar0_.write64(bar0::ASQ, value);
-    }
-    void acq(std::uint64_t value)
-    {
-        bar0_.write64(bar0::ACQ, value);
-    }
-
-  private:
-    utils::MmioRegion bar0_;
-};
 
 // Controller Capabilities
 namespace cap
@@ -250,7 +145,7 @@ using MQES = utils::BitField<uint64_t, 0, 16>; // Max Queue Entries
 // 0: Weighted Round Robinw with Urgent Priority Class
 using AMS     = utils::BitField<uint64_t, 17, 2>; // Arbitration Mechanism Supported
 using TIMEOUT = utils::BitField<uint64_t, 24, 8>; // Timeout (500ms units)
-using DSTR    = utils::BitField<uint64_t, 32, 4>; // Doorbell Stride
+using DSTRD   = utils::BitField<uint64_t, 32, 4>; // Doorbell Stride
 using NSSRS   = utils::BitField<uint64_t, 36, 1>; // NVM Subsystem Reset
 using CSS     = utils::BitField<uint64_t, 37, 8>; // Command Sets Supported
 using MPSMin  = utils::BitField<uint64_t, 48, 4>; // Min Page Size (2^(12+n))
@@ -296,27 +191,23 @@ constexpr uint8_t NOIOCSS = 0b111;
 } // namespace css
 } // namespace cc
 
+// Controller Status
 namespace csts
 {
 using RDY = utils::BitField<uint32_t, 0, 1>; // Ready
 }
 
+// Admin Queue Attributes. Queue sizes are 0's based.
 namespace aqa
 {
 using ASQS = utils::BitField<uint32_t, 0, 12>;
 using ACQS = utils::BitField<uint32_t, 16, 12>;
 } // namespace aqa
 
-namespace asq
-{
-using ASQB = utils::BitField<uint64_t, 12, 52>;
-}
+// NOTE: ASQ/ACQ (admin queue base address registers) hold the page-aligned
+// IOVA directly
 
-namespace acq
-{
-using ACQB = utils::BitField<uint64_t, 12, 52>;
-}
-
+// IO command set opcodes
 namespace command
 {
 
@@ -333,31 +224,6 @@ enum class Opcode : uint8_t
     ResvRegister     = 0x0D,
     ResvReport       = 0X0E,
 };
-
-enum class AdminOpcode : uint8_t
-{
-    DeleteSq                 = 0x00,
-    CreateSq                 = 0x01,
-    GetLogPage               = 0x02,
-    DeleteCq                 = 0x04,
-    CreateCq                 = 0x05,
-    Identify                 = 0x06,
-    AbortCmd                 = 0x08,
-    SetFeatures              = 0x09,
-    GetFeatures              = 0x0a,
-    AsyncEvent               = 0x0c,
-    NsManagement             = 0x0d,
-    DeviceSelfTest           = 0x14,
-    NsAttach                 = 0x15,
-    KeepAlive                = 0x18,
-    DirectiveSend            = 0x19,
-    DirectiveReceive         = 0x1a,
-    VirtualizationManagement = 0x1c,
-    NvmeMiSend               = 0x1d,
-    NvmeMiRecv               = 0x1e,
-    DbBufConfig              = 0x7C,
-};
-
 } // namespace command
 
 }; // namespace nvme

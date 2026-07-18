@@ -3,6 +3,7 @@
 #include <bitset>
 #include <concepts>
 #include <cstdlib>
+#include <cstring>
 #include <version>
 
 // compat layer for type punning

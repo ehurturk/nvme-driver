@@ -1,6 +1,9 @@
 #pragma once
 
-#include "traits.hpp"
+#include <cstddef>
+#include <cstdint>
+#include <type_traits>
+
 #include "utils.hpp"
 
 namespace nvme
@@ -120,7 +123,7 @@ struct CompletionEntry
 
     // cdw3:
     std::uint16_t cid;
-    std::uint16_t status; // first bit is the present (P) bit
+    std::uint16_t status; // first bit is the present bit
 
     inline bool succeeded() noexcept
     {
@@ -146,19 +149,19 @@ inline DWRD make_cdw0(std::uint8_t opc, std::uint16_t cid, std::uint8_t fuse = 0
 
 inline std::uint8_t opcode(const CommonCommand& c)
 {
-    return cdw0::OPC::extract(c.cdw0);
+    return static_cast<std::uint8_t>(cdw0::OPC::extract(c.cdw0));
 }
 inline std::uint16_t cid(const CommonCommand& c)
 {
-    return cdw0::CID::extract(c.cdw0);
+    return static_cast<std::uint16_t>(cdw0::CID::extract(c.cdw0));
 }
 inline std::uint8_t psdt(const CommonCommand& c)
 {
-    return cdw0::PSDT::extract(c.cdw0);
+    return static_cast<std::uint8_t>(cdw0::PSDT::extract(c.cdw0));
 }
 inline std::uint8_t fuse(const CommonCommand& c)
 {
-    return cdw0::FUSE::extract(c.cdw0);
+    return static_cast<std::uint8_t>(cdw0::FUSE::extract(c.cdw0));
 }
 
 } // namespace sqe

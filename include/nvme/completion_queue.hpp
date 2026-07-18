@@ -1,36 +1,39 @@
 #pragma once
 
 #include <atomic>
-#include <cstring>
+#include <bit>
+#include <cassert>
 #include <optional>
 
-#include "dma_memory_view.hpp"
+#include "dma/buffer.hpp"
 #include "lifetime.hpp"
-#include "queue_entry.hpp"
-#include "traits.hpp"
+#include "nvme/queue_entry.hpp"
+#include "nvme/traits.hpp"
+#include "utils.hpp"
 
 namespace nvme
 {
 template <class Kind, std::size_t N = QueueTraits<Kind>::depth> class CompletionQueue
 {
   public:
-    using Trait = QueueTraits<Kind>;
-    using Entry = CompletionEntry;
+    using Traits = QueueTraits<Kind>;
+    using Entry  = CompletionEntry;
 
     static constexpr std::size_t depth = N;
 
     static_assert(std::has_single_bit(depth), "Queue size must be a power of 2.");
     static_assert(sizeof(Entry) == 16, "Completion queue entry size must be 16 bytes.");
 
-    // Check trivially copyable and standard layout for cheap copies & semantics
     static_assert(std::is_trivially_copyable_v<Entry>);
     static_assert(std::is_standard_layout_v<Entry>);
     static_assert(depth > 1);
     static_assert(depth <= 65536);
 
-    CompletionQueue(DmaMemoryView mem, QueueHardwareContext context)
-            : memory_{mem}, queue_id_{context.queue_id}, doorbell_{context.cq_head_dbell}, expected_bit_{1}
-    {}
+    CompletionQueue(dma::DmaView memory, volatile std::uint32_t* head_doorbell)
+            : memory_{memory}, doorbell_{head_doorbell}, expected_bit_{1}
+    {
+        assert(memory_.size >= depth * sizeof(Entry));
+    }
 
     std::optional<Entry> poll()
     {
@@ -77,16 +80,14 @@ template <class Kind, std::size_t N = QueueTraits<Kind>::depth> class Completion
   private:
     void ring_head_doorbell()
     {
-        *doorbell_ = head_;
+        *doorbell_ = static_cast<std::uint32_t>(head_);
     }
 
   private:
-    DmaMemoryView           memory_;
-    std::uint16_t           queue_id_;
+    dma::DmaView            memory_;
     volatile std::uint32_t* doorbell_;
     std::size_t             head_{};
 
-    // the expected phase tag bit, initially starts as 1 for the very first CQE.
     std::uint8_t expected_bit_;
 };
 } // namespace nvme

@@ -3,10 +3,10 @@
 #include <assert.h>
 #include <cstdint>
 
-#include "../queue_entry.hpp"
-#include "../utils.hpp"
-#include "command_layout.hpp"
-#include "features.hpp"
+#include "nvme/admin/command_layout.hpp"
+#include "nvme/admin/features.hpp"
+#include "nvme/queue_entry.hpp"
+#include "utils.hpp"
 
 namespace nvme::admin
 {
@@ -299,7 +299,16 @@ struct AsyncEventRequest
 //          bits 8 - 15: Aggregation Time (TIME): Specifies the recommended maximum time in 100 microsecond increments
 //                                                that a controller may delay an interrupt due to interrupt coalescing.
 // CDW14: bits 0 - 6: UUID index
-template <typename Feature> struct SetFeatures
+
+template <typename Feature>
+concept IsFeature = requires (Feature f, const CompletionEntry& e){
+    Feature::Completion;
+    Feature::id;
+    Feature::decode_completion(e);
+    f.encode_cdw11();
+};
+
+template <IsFeature Feature> struct SetFeatures
 {
     Feature       feature;
     bool          save       = false;
@@ -326,7 +335,7 @@ template <typename Feature> struct SetFeatures
     }
 };
 
-template <typename Feature> struct GetFeatures
+template <IsFeature Feature> struct GetFeatures
 {
     features::Select sel        = features::Select::Current;
     std::uint64_t    prp1       = 0;
