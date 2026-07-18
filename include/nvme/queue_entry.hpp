@@ -65,10 +65,10 @@ struct CommonCommand
     DWRD          cdw14;
     DWRD          cdw15;
 
-    static CommonCommand build(admin::Opcode opc, std::uint16_t cid)
+    static CommonCommand build(admin::Opcode opc, std::uint16_t cid, sqe::cdw0::Psdt psdt = sqe::cdw0::Psdt::Prp)
     {
         CommonCommand c{};
-        c.cdw0 = sqe::cdw0::encode(opc, cid);
+        c.cdw0 = sqe::cdw0::encode(opc, cid, psdt);
         return c;
     }
 };

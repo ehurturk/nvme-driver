@@ -35,6 +35,7 @@ template <class Kind, std::size_t N = QueueTraits<Kind>::depth> class Completion
         assert(memory_.size >= depth * sizeof(Entry));
     }
 
+    // non blocking poll
     std::optional<Entry> poll()
     {
         //              H   T

@@ -5,6 +5,7 @@
 
 #include "nvme/admin/command_layout.hpp"
 #include "nvme/admin/features.hpp"
+#include "nvme/admin/identify.hpp"
 #include "nvme/queue_entry.hpp"
 #include "utils.hpp"
 
@@ -194,41 +195,62 @@ struct DeleteIoSq
     }
 };
 
+template <typename T, typename Expected>
+concept SameAsUnqualified = std::same_as<std::remove_cvref_t<T>, Expected>;
+
+template <typename Target>
+concept IsIdentifyTarget = requires {
+    typename Target::Data;
+    { Target::cns } -> std::convertible_to<IdentifyCns>;
+    { Target::cntid } -> SameAsUnqualified<std::uint16_t>;
+    { Target::cnssid } -> SameAsUnqualified<std::uint16_t>;
+};
+
 // Identify (opcode 0x06)
 // DPTR (128 bits): start of the data buffer
 // CDW10: bits 0 - 7 CNS: Controller or namespace structure
 //            16 - 31 CNTID: Controller Identifier
 // CDW11: bits 0 - 15: CNSSID (CNS Specific Identifier): Dependent on the specified CNS value
 //            24 - 31: CSI: Command Set Identifier (if not used should be cleared to 0x0).
-struct Identify
+template <IsIdentifyTarget Target> struct Identify
 {
-    // controller namespace
-    enum class Cns : std::uint8_t
+    using Data = typename Target::Data;
+
+    enum class Csi : std::uint8_t
     {
-        Namespace          = 0x00,
-        Controller         = 0x01,
-        ActiveNamespaceIds = 0x02,
+        NVM                   = 0x0,
+        KeyValue              = 0x1,
+        ZonedNamespace        = 0x2,
+        SubsystemLocalMemory  = 0x3,
+        ComputationalPrograms = 0x4
     };
 
-    std::uint64_t prp1{}; // iova of 4 KiB result buffer
-    Cns           cns{};
-    std::uint32_t nsid   = 0; // only for namespace scoped cns values
-    std::uint16_t cntid  = 0;
-    std::uint16_t cnssid = 0;
-    std::uint8_t  csi    = 0;
+    std::uint64_t            prp1{}; // iova of 4 KiB result buffer
+    static constexpr auto    cns = Target::cns;
+    static constexpr auto cntid = Target::cntid;
+    static constexpr auto cnssid = Target::cnssid;
+    std::uint32_t            nsid   = 0; // only for namespace scoped cns values
+    Csi                      csi    = Csi::NVM;
 
+    // TODO: based on the CNS set NSID, CNTID, CSI automatically
     CommonCommand build(std::uint16_t this_cid) const noexcept
     {
-        CommonCommand c = CommonCommand::build(Opcode::Identify, this_cid);
 
-        c.nsid  = nsid;
+        // set CDW0.PSDT = 0x0 to indicate the use of PRPs for the transfer
+        CommonCommand c = CommonCommand::build(Opcode::Identify, this_cid, sqe::cdw0::Psdt::Prp);
+
+        c.nsid = nsid;
+        // use only prp1 as a 4 KB buffer fits exactly into a page, so no need to use prp2
         c.dptr  = DataPointer::prp(prp1);
         c.cdw10 = layout::identify_cdw10::encode(utils::to_underlying(cns), cntid);
-        c.cdw11 = layout::identify_cdw11::encode(cnssid, csi);
+        c.cdw11 = layout::identify_cdw11::encode(cnssid, utils::to_underlying(csi));
 
         return c;
     }
 
+    // no need to look at Completion, as the controller DMAs the resulting data buffer that describes information about
+    // the NVM subsystem, the domain,  the controller or the namespaces to the DPTR. the data structure is 4096 bytes in
+    // size
     struct Completion
     {};
 
@@ -237,6 +259,9 @@ struct Identify
         return Completion{};
     }
 };
+
+using IdentifyControllerType = Identify<IdentifyController>;
+using IdentifyNamespaceType = Identify<IdentifyNamespace>;
 
 struct AsyncEventRequest
 {
@@ -301,7 +326,7 @@ struct AsyncEventRequest
 // CDW14: bits 0 - 6: UUID index
 
 template <typename Feature>
-concept IsFeature = requires (Feature f, const CompletionEntry& e){
+concept IsFeature = requires(Feature f, const CompletionEntry& e) {
     Feature::Completion;
     Feature::id;
     Feature::decode_completion(e);
