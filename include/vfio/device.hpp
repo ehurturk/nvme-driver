@@ -1,9 +1,11 @@
 #pragma once
 
 #include <linux/vfio.h>
+#include <linux/pci_regs.h> // for PCI_COMMAND, PCI_COMMAND_MEMORY, PCI_COMMAND_MASTER
 
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <unistd.h>
 
 #include <cstdint>
 #include <utility>
@@ -53,6 +55,24 @@ class VfioDevice
         //       of the pages are the pages of the device file.
         return os::MappedMemory{info.size, PROT_READ | PROT_WRITE, MAP_SHARED, fd_.get(),
                                 static_cast<off_t>(info.offset)};
+    }
+
+    // NOTE: On QEMU, I have noticed that I was getting CSTS=0x2 after ringing doorbells, so there was an
+    // issue with DMA. After further investigation, I have found out that even though device is bound to the
+    // vfio-pci driver, its Bus Master Enable bit in the Command register of the VFIO_PCI_CONFIG_REGION_INDEX
+    // was not set to ON, hence the DMA was not set up correctly. To turn the bit ON, we have to manually
+    // flip the bit on via accessing the region.
+    void enable_bus_master()
+    {
+        const vfio_region_info info    = region_info(VFIO_PCI_CONFIG_REGION_INDEX);
+        const off_t            cmd_off = static_cast<off_t>(info.offset) + PCI_COMMAND;
+
+        std::uint16_t command = 0;
+        check(::pread(fd_.get(), &command, sizeof(command), cmd_off) != sizeof(command), "pread PCI_COMMAND");
+
+        command |= PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
+
+        check(::pwrite(fd_.get(), &command, sizeof(command), cmd_off) != sizeof(command), "pwrite PCI_COMMAND");
     }
 
     void reset()

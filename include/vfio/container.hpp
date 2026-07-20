@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "os/fd.hpp"
+#include "utils.hpp"
 #include "vfio/error.hpp"
 
 namespace vfio
@@ -51,6 +52,7 @@ class VfioContainer
         check(::ioctl(fd_.get(), VFIO_SET_IOMMU, VFIO_TYPE1_IOMMU) != 0, "VFIO_SET_IOMMU Type1");
 
         cache_iova_ranges();
+        seed_iova_cursor();
         iommu_enabled_ = true;
     }
 
@@ -64,11 +66,7 @@ class VfioContainer
         check(reinterpret_cast<std::uintptr_t>(uva) % PAGE_SIZE != 0 || size % PAGE_SIZE != 0,
               "DMA buffer not page-aligned");
 
-        // iova == uva for easy translation (I believe SPDK/DPDK do this asw)
-        const std::uint64_t iova = reinterpret_cast<std::uint64_t>(uva);
-
-        if (!iova_range_valid(iova, size))
-            throw std::runtime_error("requested IOVA does not fit any valid IOMMU IOVA range");
+        const std::uint64_t iova = alloc_iova(size);
 
         vfio_iommu_type1_dma_map dma_map{};
         dma_map.argsz = sizeof(dma_map);
@@ -150,9 +148,41 @@ class VfioContainer
         return false;
     }
 
+    void seed_iova_cursor()
+    {
+        std::uint64_t base = iova_ranges_.empty() ? std::uint64_t{0x10000} : iova_ranges_.front().first;
+        if (base < PAGE_SIZE)
+            base = PAGE_SIZE;
+        iova_cursor_ = utils::page_round_up(base);
+    }
+
+    std::uint64_t alloc_iova(std::size_t size)
+    {
+        std::uint64_t iova = iova_cursor_;
+
+        if (!iova_range_valid(iova, size)) {
+            // snap to next range that fits as it doesnt fit in this iova range
+            bool placed = false;
+            for (const auto& range : iova_ranges_) {
+                const std::uint64_t start = utils::page_round_up(range.first < PAGE_SIZE ? PAGE_SIZE : range.first);
+                if (start >= iova && start + size - 1 <= range.last) {
+                    iova   = start;
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed)
+                throw std::runtime_error("out of IOVA space for DMA mapping");
+        }
+
+        iova_cursor_ = iova + size;
+        return iova;
+    }
+
   private:
     os::UniqueFd           fd_;
     std::vector<IovaRange> iova_ranges_;
+    std::uint64_t          iova_cursor_   = 0x10000;
     bool                   iommu_enabled_ = false;
 };
 

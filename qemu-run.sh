@@ -9,6 +9,7 @@ if [[ ! -f "$NVME_IMG" ]]; then
 fi
 
 qemu-system-x86_64 \
+    -trace enable='pci_nvme*' 2>/tmp/qemu.log \
     -machine q35,accel=kvm,kernel-irqchip=split \
     -cpu host \
     -smp 4 \

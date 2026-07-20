@@ -33,8 +33,8 @@ struct IdentifyController
 
 struct IdentifyNamespace
 {
-    using Data                = IdentifyNamespaceData;
-    static constexpr auto cns = IdentifyCns::Namespace;
+    using Data                            = IdentifyNamespaceData;
+    static constexpr auto          cns    = IdentifyCns::Namespace;
     static constexpr std::uint16_t cntid  = 0;
     static constexpr std::uint16_t cnssid = 0;
     // TODO: what about NSID?
@@ -98,7 +98,13 @@ class IdentifyControllerData
         return v;
     }
 
-    std::string_view str(std::size_t offset, std::size_t len) const;
+    std::string_view str(std::size_t offset, std::size_t len) const
+    {
+        if (offset > data_.size() || len > data_.size() - offset)
+            return "";
+
+        return {reinterpret_cast<const char*>(data_.data() + offset), len};
+    }
 
     alignas(8) std::array<std::byte, SIZE> data_; // 4 KB buffer
 };
