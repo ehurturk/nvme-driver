@@ -47,12 +47,14 @@ template <class Kind, std::size_t N = QueueTraits<Kind>::depth> class Completion
         // 1) Peek at the CQE at head slot
         std::byte* dst = memory_.uva + head_ * sizeof(Entry);
 
+        assert(reinterpret_cast<std::uintptr_t>(dst) % alignof(Entry) == 0);
+
         Entry* e = compat::load_object_from_bytes<Entry>(dst);
 
-        std::uint16_t status = utils::ReadVolatile(e->status);
-        std::uint8_t  phase  = cqe::phase(status);
+        std::uint16_t raw_status = utils::ReadVolatile(e->status);
+        CompletionStatus status { .status = raw_status };
 
-        if (phase != expected_bit_) {
+        if (status.phase() != expected_bit_) {
             return std::nullopt;
         }
 

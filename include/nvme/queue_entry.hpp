@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <format>
+#include <string>
 #include <type_traits>
 
 #include "utils.hpp"
@@ -94,12 +96,6 @@ enum class StatusCodeType : std::uint8_t
 
 } // namespace status
 
-// phase bit is the first bit of the status field
-inline std::uint8_t phase(std::uint16_t status)
-{
-    return status & 0x1;
-}
-
 } // namespace cqe
 
 // Contents of Dword 0 and Dword 1 in a CompletionEntry are
@@ -111,6 +107,53 @@ struct CompletionResult
     DWRD cdw0;
     DWRD cdw1;
 };
+
+// this is bits 17-31 of CDW3
+struct CompletionStatus
+{
+    std::uint16_t status;
+
+    inline bool succeeded() const
+    {
+        // SC bits are bits 1-8 and SCT Bits are bits 9-11
+        // so this bitmask is bits 1-11:
+        // 0x0ffe = 0000_1111_1111_1110
+        return (status & 0x0ffe) == 0;
+    }
+
+    inline std::uint8_t status_code() const
+    {
+        return static_cast<std::uint8_t>(cqe::status::SC::extract(status));
+    }
+
+    inline cqe::status::StatusCodeType status_code_type() const
+    {
+        auto val = cqe::status::SCT::extract(status);
+        return static_cast<cqe::status::StatusCodeType>(val);
+    }
+
+    inline std::uint8_t phase() const
+    {
+        return static_cast<std::uint8_t>(cqe::status::P::extract(status));
+    }
+
+    inline std::uint8_t command_retry_delay() const
+    {
+        return static_cast<std::uint8_t>(cqe::status::CRD::extract(status));
+    }
+
+    inline bool do_not_retry() const
+    {
+        return static_cast<bool>(cqe::status::DNR::extract(status));
+    }
+
+    inline bool more() const
+    {
+        return static_cast<bool>(cqe::status::M::extract(status));
+    }
+};
+
+static_assert(sizeof(CompletionStatus) == sizeof(std::uint16_t));
 
 struct CompletionEntry
 {
@@ -125,13 +168,10 @@ struct CompletionEntry
     std::uint16_t cid;
     std::uint16_t status; // first bit is the present bit
 
-    inline bool succeeded() noexcept
+    inline CompletionStatus stat() const
     {
-        // SC bits are bits 1-8 and SCT Bits are bits 9-11
-        // so this bitmask is bits 1-11:
-        // 0x0ffe = 0000_1111_1111_1110
-        return (status & 0x0ffe) == 0;
-    }
+        return CompletionStatus{.status = status};
+    };
 };
 
 namespace sqe
@@ -200,3 +240,36 @@ static_assert(offsetof(CompletionEntry, cid) == 12);
 static_assert(offsetof(CompletionEntry, status) == 14);
 
 } // namespace nvme
+
+namespace std
+{
+template <> struct formatter<nvme::CompletionStatus>
+{
+    constexpr auto parse(format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+
+        // Only "{}" is supported; reject custom specifiers such as "{:x}".
+        if (it != ctx.end() && *it != '}')
+            throw format_error("invalid format specifier for nvme::CompletionStatus");
+
+        return it;
+    }
+
+    auto format(const nvme::CompletionStatus& c, format_context& ctx) const
+    {
+        return format_to(ctx.out(),
+                         "raw=0x{:04x}, "
+                         "succeeded={}, "
+                         "phase={}, "
+                         "sct={}, "
+                         "sc={}, "
+                         "crd={}, "
+                         "more={}, "
+                         "dnr={}",
+                         c.status, c.succeeded(), static_cast<unsigned>(c.phase()),
+                         utils::to_underlying(c.status_code_type()), static_cast<unsigned>(c.status_code()),
+                         static_cast<unsigned>(c.command_retry_delay()), c.more(), c.do_not_retry());
+    }
+};
+} // namespace std

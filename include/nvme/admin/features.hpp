@@ -52,15 +52,13 @@ struct NumberOfQueues
 {
     static constexpr FeatureId id = FeatureId::NumberOfQueues;
 
-    // number of submission & completion queues.
     // Write these as 1s based, it is converted to 0s based on encoding.
-    std::uint16_t nsq{};
-    std::uint16_t ncq{};
+    std::uint16_t nsq{}; // number of submission queues
+    std::uint16_t ncq{}; // number of completion queues
 
-    struct Cdw11
-    {
-        using NSQR = utils::BitField<DWRD, 0, 16>;  // 0 based
-        using NCQR = utils::BitField<DWRD, 16, 16>; // 0 based
+    struct cdw11 {
+        using NSQR = utils::BitField<DWRD, 0, 16>;  // 0 based, # of IOSQ requested (not including admin q)
+        using NCQR = utils::BitField<DWRD, 16, 16>; // 0 based, # of IOCQ requested (not including admin q)
     };
 
     DWRD encode_cdw11() const noexcept
@@ -68,7 +66,7 @@ struct NumberOfQueues
         assert(nsq > 0);
         assert(ncq > 0);
 
-        return utils::DwordBuilder<>{}.set<Cdw11::NSQR>(nsq - 1).set<Cdw11::NCQR>(ncq - 1).get();
+        return utils::DwordBuilder<>{}.set<cdw11::NSQR>(nsq - 1).set<cdw11::NCQR>(ncq - 1).get();
     }
 
     // completion dw0
@@ -80,12 +78,12 @@ struct NumberOfQueues
 
     static Completion decode_completion(const CompletionEntry& c) noexcept
     {
-        using NSQA = utils::BitField<DWRD, 0, 16>;
-        using NCQA = utils::BitField<DWRD, 16, 16>;
+        using NSQA = utils::BitField<DWRD, 0, 16>; // # of IOSQ allocated
+        using NCQA = utils::BitField<DWRD, 16, 16>; // # of IOCQ allocated
 
         return Completion{
-                .allocated_sq = static_cast<std::uint16_t>(NSQA::extract(c.completion_result.cdw0) + 1),
-                .allocated_cq = static_cast<std::uint16_t>(NCQA::extract(c.completion_result.cdw0) + 1),
+            .allocated_sq = static_cast<std::uint16_t>(NSQA::extract(c.completion_result.cdw0) + 1),
+            .allocated_cq = static_cast<std::uint16_t>(NCQA::extract(c.completion_result.cdw0) + 1),
         };
     }
 };

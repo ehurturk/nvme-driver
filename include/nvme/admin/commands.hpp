@@ -87,10 +87,12 @@ struct CreateIoCq
         return c;
     }
     struct Completion
-    {};
+    {
+       std::uint16_t status;
+    };
     static Completion decode_completion(const CompletionEntry& c)
     {
-        return Completion{};
+        return Completion{ .status = c.stat().status_code() };
     }
 };
 
@@ -327,8 +329,8 @@ struct AsyncEventRequest
 
 template <typename Feature>
 concept IsFeature = requires(Feature f, const CompletionEntry& e) {
-    Feature::Completion;
-    Feature::id;
+    typename Feature::Completion;
+    { Feature::id } -> std::convertible_to<nvme::features::FeatureId>;
     Feature::decode_completion(e);
     f.encode_cdw11();
 };

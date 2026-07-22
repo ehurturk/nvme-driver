@@ -91,8 +91,10 @@ class Controller final
 
         const auto capMPSMax = cap::MPSMax::extract(cap);
         const auto capMPSMin = cap::MPSMin::extract(cap);
+        const auto capMQES   = cap::MQES::extract(cap);
 
         std::println("MPSMax: {}\nMPSMin: {}", capMPSMax, capMPSMin);
+        std::println("Max Queue Entry Size (CAP.MQES): {}", capMQES);
 
         if (ccMps < capMPSMin || ccMps > capMPSMax) {
             ccMps = static_cast<std::uint8_t>(capMPSMin);

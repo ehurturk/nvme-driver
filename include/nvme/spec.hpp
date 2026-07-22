@@ -102,10 +102,12 @@ namespace constants
 {
 // include/linux/nvme.h
 
+// These are queue sizes, i.e. # of elements in a queue
 static constexpr std::size_t AQ_DEPTH = 32;
-static_assert(AQ_DEPTH <= 4096 && AQ_DEPTH > 0);
+static_assert(AQ_DEPTH <= 4096 && AQ_DEPTH > 2);
 
 static constexpr std::size_t IO_DEPTH = 1024;
+static_assert(IO_DEPTH <= 65536 && IO_DEPTH > 2);
 
 // For the queue entry size constants,
 // the NVMe spec says "the value

@@ -84,6 +84,9 @@ template <class Kind, std::size_t N = QueueTraits<Kind>::depth> class Submission
         return ((tail_ + 1) & (depth - 1)) == head_;
     }
 
+    std::size_t head() const { return head_; }
+    std::size_t tail() const { return tail_; }
+
   private:
     void ring_tail_doorbell()
     {
