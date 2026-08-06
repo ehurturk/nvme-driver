@@ -4,25 +4,59 @@
 #include <chrono>
 #include <concepts>
 #include <cstdint>
+#include <expected>
+#include <format>
+#include <optional>
 #include <print>
+#include <string>
 #include <thread>
+#include <type_traits>
+#include <unordered_map>
 
-#include "dma/heap.hpp"
-#include "nvme/queue_pair.hpp"
-#include "nvme/registers.hpp"
-#include "nvme/spec.hpp"
-#include "os/mmio.hpp"
-#include "utils.hpp"
+#include "../dma/heap.hpp"
+#include "../os/mmio.hpp"
+#include "../utils.hpp"
+#include "cid.hpp"
+#include "nvme/queue_entry.hpp"
+#include "queue_pair.hpp"
+#include "registers.hpp"
+#include "spec.hpp"
 
 namespace nvme
 {
 
 using namespace std::chrono_literals;
 
+template <typename Command>
+concept CommandType = std::default_initializable<Command>;
+
+template <typename Fn, typename Command>
+concept CommandBuilder = std::invocable<Fn, Command&> && std::is_void_v<std::invoke_result_t<Fn, Command&>>;
+
 struct NvmeDeviceHandle
 {
     os::MmioRegion bar0;
     dma::DmaHeap&  dma;
+};
+
+struct InFlightCommand
+{
+    Cid                            cid;
+    std::optional<CompletionEntry> result;
+    CommonCommand                  cmd;
+};
+
+struct ControllerDiagnostic
+{
+    enum class Severity
+    {
+        INFO,
+        WARN,
+        ERROR
+    };
+
+    std::string reason;
+    Severity    severity;
 };
 
 class Controller final
@@ -34,7 +68,7 @@ class Controller final
   public:
     explicit Controller(NvmeDeviceHandle device)
             : regs_{device.bar0}, admin_queue_pair_{device.dma, regs_.doorbells(AdminQueuePair::AQ_ID)},
-              timeout_{125ms}
+              timeout_{125ms}, admin_cid_allocator_{constants::AQ_DEPTH} // max 32 elements could be present at a queue
     {
         const auto vs    = regs_.vs();
         const auto minor = vs::MinorVersion::extract(vs);
@@ -147,6 +181,107 @@ class Controller final
         enable();
     }
 
+    // submits an admin command that is built via the builder function provided
+    // NOTE: waits for its result as well, this is *blocking*
+    template <CommandType Command, CommandBuilder<Command> Fn>
+    std::expected<CompletionEntry, ControllerDiagnostic> execute_admin_command(Fn&& cmd_builder_fn)
+    {
+        auto submitted = submit_admin_command<Command>(std::forward<Fn>(cmd_builder_fn));
+        if (!submitted)
+            return std::unexpected{submitted.error()};
+
+        return poll_admin_command(submitted->get());
+    }
+
+    template <CommandType Command, CommandBuilder<Command> Fn>
+    std::expected<Cid, ControllerDiagnostic> submit_admin_command(Fn&& fn)
+    {
+        Command c{};
+        fn(c);
+
+        Cid           cmd_id = admin_cid_allocator_.allocate();
+        CommonCommand cmd    = c.build(cmd_id.get());
+
+        auto& asq = admin_queue_pair_.sq();
+        asq.push(cmd);
+
+        auto ins = in_flight_cmds_.try_emplace(cmd_id.get(), InFlightCommand{std::move(cmd_id), std::nullopt, cmd});
+        if (!ins.second) {
+            // we have a problem: we submit a command but now we got it again?
+            return std::unexpected{ControllerDiagnostic{"Encountered an already submitted CID",
+                                                        ControllerDiagnostic::Severity::ERROR}};
+        }
+
+        return cmd_id;
+    }
+
+    // TODO: this was Cid cid before but Cid is only moveable therefore it didn't make any sense.
+    //       therefore make Cid really a handle -> i.e. a copyable one (cheap to copy)
+    std::expected<CompletionEntry, ControllerDiagnostic> poll_admin_command(Cid::value_type cid)
+    {
+        auto& acq = admin_queue_pair_.cq();
+        auto& asq = admin_queue_pair_.sq();
+
+        const auto waited = in_flight_cmds_.find(cid);
+        if (waited == in_flight_cmds_.end()) {
+            return std::unexpected{ControllerDiagnostic{std::format("Polling for CID {}, which is not in flight", cid),
+                                                        ControllerDiagnostic::Severity::ERROR}};
+        }
+
+        // an earlier poll for some other command could place the result into the flight buffer
+        if (waited->second.result.has_value()) {
+            const CompletionEntry completion = *waited->second.result;
+            in_flight_cmds_.erase(waited);
+            return completion;
+        }
+
+        const auto deadline = std::chrono::steady_clock::now() + constants::ADMIN_CMD_TIMEOUT;
+
+        while (true) {
+            const std::optional<CompletionEntry> completion = acq.poll();
+
+            if (!completion.has_value()) {
+                if (std::chrono::steady_clock::now() >= deadline) {
+                    // NOTE: the command is still in flight so the CID should NOT be released
+                    return std::unexpected{ControllerDiagnostic{std::format("Timed out after {}s waiting for CID {}",
+                                                                            constants::ADMIN_CMD_TIMEOUT.count(), cid),
+                                                                ControllerDiagnostic::Severity::ERROR}};
+                }
+
+                std::this_thread::yield();
+                continue;
+            }
+
+            asq.advance_head(completion->sq_head);
+
+            const auto it = in_flight_cmds_.find(completion->cid);
+            if (it == in_flight_cmds_.end()) {
+                return std::unexpected{ControllerDiagnostic{
+                        std::format("Completion for CID {}, which was never submitted", completion->cid),
+                        ControllerDiagnostic::Severity::ERROR}};
+            }
+
+            InFlightCommand& entry = it->second;
+            if (entry.result.has_value()) {
+                return std::unexpected{ControllerDiagnostic{
+                        std::format("Duplicate completion for CID {} (opcode {}), which was already completed",
+                                    completion->cid, sqe::cdw0::OPC::extract(entry.cmd.cdw0)),
+                        ControllerDiagnostic::Severity::ERROR}};
+            }
+
+            if (completion->cid != cid) {
+                // not our command, hand the observed result to the owner's slot
+                entry.result = completion;
+                continue;
+            }
+
+            // release CID as there are no in flight commands for it now
+            // as in flight commands owns it should call the destructor
+            in_flight_cmds_.erase(it);
+            return *completion;
+        }
+    }
+
     AdminQueuePair& admin_queues()
     {
         return admin_queue_pair_;
@@ -202,6 +337,10 @@ class Controller final
     ControllerRegisters       regs_;
     AdminQueuePair            admin_queue_pair_;
     std::chrono::milliseconds timeout_;
+
+    CidAllocator admin_cid_allocator_;
+
+    std::unordered_map<Cid::value_type, InFlightCommand> in_flight_cmds_;
 };
 
 } // namespace nvme

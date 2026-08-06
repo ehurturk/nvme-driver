@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 
@@ -118,6 +119,9 @@ static constexpr std::size_t ADM_CQES = 4;
 
 static constexpr std::size_t IO_SQES = 6;
 static constexpr std::size_t IO_CQES = 4;
+
+// Linux uses 60s for admin cmd timeout asw
+static constexpr std::chrono::seconds ADMIN_CMD_TIMEOUT{60};
 } // namespace constants
 
 // Register offsets in BAR0
