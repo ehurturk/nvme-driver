@@ -190,29 +190,32 @@ class Controller final
         if (!submitted)
             return std::unexpected{submitted.error()};
 
-        return poll_admin_command(submitted->get());
+        return poll_admin_command(*submitted);
     }
 
     template <CommandType Command, CommandBuilder<Command> Fn>
-    std::expected<Cid, ControllerDiagnostic> submit_admin_command(Fn&& fn)
+    std::expected<Cid::value_type, ControllerDiagnostic> submit_admin_command(Fn&& fn)
     {
         Command c{};
         fn(c);
 
-        Cid           cmd_id = admin_cid_allocator_.allocate();
-        CommonCommand cmd    = c.build(cmd_id.get());
+        Cid cmd_id = admin_cid_allocator_.allocate();
+        auto cid_val = cmd_id.get();
+
+        CommonCommand cmd    = c.build(cid_val);
 
         auto& asq = admin_queue_pair_.sq();
         asq.push(cmd);
 
-        auto ins = in_flight_cmds_.try_emplace(cmd_id.get(), InFlightCommand{std::move(cmd_id), std::nullopt, cmd});
+        // TODO: should cmd be moved into the map asw? CommonCommand is 64 bytes wide, i would say not trivially copyable?
+        auto ins = in_flight_cmds_.try_emplace(cid_val, InFlightCommand{std::move(cmd_id), std::nullopt, cmd});
         if (!ins.second) {
             // we have a problem: we submit a command but now we got it again?
             return std::unexpected{ControllerDiagnostic{"Encountered an already submitted CID",
                                                         ControllerDiagnostic::Severity::ERROR}};
         }
 
-        return cmd_id;
+        return cid_val;
     }
 
     // TODO: this was Cid cid before but Cid is only moveable therefore it didn't make any sense.

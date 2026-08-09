@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <utility>
 #include <vector>
+#include <print>
 
 namespace nvme
 {
@@ -19,15 +20,18 @@ public:
     Cid(const Cid&)            = delete;
     Cid& operator=(const Cid&) = delete;
 
-    Cid(Cid&& other) noexcept : cid_{other.cid_}, allocator_{std::exchange(other.allocator_, nullptr)}
-    {}
+    Cid(Cid&& other) noexcept : cid_{other.cid_}, deleter_{std::move(other.deleter_)}
+    {
+        other.cid_ = std::numeric_limits<value_type>::max();
+        other.deleter_ = nullptr;
+    }
 
-    Cid& operator=(Cid&& other)
+    Cid& operator=(Cid&& other) noexcept
     {
         if (this != &other) {
             reset();
-            allocator_ = std::exchange(other.allocator_, nullptr);
             cid_       = other.cid_;
+            deleter_ = std::exchange(other.deleter_, nullptr);
         }
 
         return *this;
@@ -35,7 +39,8 @@ public:
 
     ~Cid()
     {
-        deleter_(cid_);
+        if (deleter_)
+            deleter_(cid_);
     }
 
     value_type get() const
@@ -60,7 +65,6 @@ public:
     value_type cid_;
 
     std::function<void(std::uint16_t)> deleter_;
-    CidAllocator*                      allocator_;
 };
 
 class CidAllocator
@@ -92,7 +96,7 @@ class CidAllocator
 
     Cid allocate()
     {
-        assert(free_.empty() && "No available CIDs");
+        assert(!free_.empty() && "No available CIDs");
 
         const auto cid = free_.back();
         free_.pop_back();
@@ -101,7 +105,7 @@ class CidAllocator
 
     void release(Cid::value_type cid) noexcept
     {
-        assert(free_.size() == 0xFFFF && "Max capacity reached for CIDs");
+        assert(free_.size() < capacity_ && "Max capacity reached for CIDs");
         free_.push_back(cid);
     }
 
@@ -112,9 +116,9 @@ class CidAllocator
 
 inline void Cid::reset()
 {
-    if (allocator_)
-        allocator_->release(cid_);
-    allocator_ = nullptr;
+    if (deleter_)
+        deleter_(cid_);
+    deleter_ = nullptr;
 }
 
 } // namespace nvme
