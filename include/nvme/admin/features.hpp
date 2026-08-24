@@ -20,7 +20,7 @@ enum class Select : std::uint8_t {
 };
 
 template<typename F>
-concept Feature = requires(const F f, const CompletionQueueEntry& e) {
+concept Feature = requires(const F f, const wire::CompletionEntry& e) {
     typename F::Completion;
     { F::id } -> std::convertible_to<FeatureId>;
     { f.value() } noexcept -> std::same_as<DWRD>;
@@ -43,7 +43,7 @@ struct NumberOfQueues {
         std::uint16_t allocated_cq;
     };
 
-    static Completion decode_completion(const CompletionQueueEntry& c) noexcept;
+    static Completion decode_completion(const wire::CompletionEntry& c) noexcept;
 
 private:
     using NSQR =
@@ -63,7 +63,7 @@ struct InterruptCoalescing {
 
     struct Completion {};
 
-    static Completion decode_completion(const CompletionQueueEntry&) noexcept;
+    static Completion decode_completion(const wire::CompletionEntry&) noexcept;
 
 private:
     using THR = utils::BitField<DWRD, 0, 8>;

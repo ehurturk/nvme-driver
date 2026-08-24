@@ -134,12 +134,11 @@ AdminQueuePair& Controller::admin_queues() {
     return admin_queue_pair_;
 }
 
-std::expected<CompletionQueueEntry, ControllerDiagnostic>
-Controller::poll_admin_command(Cid::value_type cid) {
+Result<wire::CompletionEntry> Controller::poll_admin_command(Cid::value_type cid) {
     if (!in_flight_cmds_.contains(cid)) {
-        return std::unexpected{ControllerDiagnostic{
+        return std::unexpected{Error{
             .reason = std::format("Polling for CID {}, which is not in flight", cid),
-            .severity = ControllerDiagnostic::Severity::ERROR
+            .severity = Error::Severity::ERROR
         }};
     }
 
@@ -150,17 +149,17 @@ Controller::poll_admin_command(Cid::value_type cid) {
             return *done;
         }
 
-        const std::optional<CompletionQueueEntry> completion = admin_queue_pair_.cq().poll();
+        const std::optional<wire::CompletionEntry> completion = admin_queue_pair_.cq().poll();
         if (!completion.has_value()) {
             if (std::chrono::steady_clock::now() >= deadline) {
                 // NOTE: the command is still in flight so the cid should not be released
-                return std::unexpected{ControllerDiagnostic{
+                return std::unexpected{Error{
                     .reason = std::format(
                         "Timed out after {}s waiting for CID {}",
                         constants::ADMIN_CMD_TIMEOUT.count(),
                         cid
                     ),
-                    .severity = ControllerDiagnostic::Severity::ERROR
+                    .severity = Error::Severity::ERROR
                 }};
             }
 
@@ -175,12 +174,12 @@ Controller::poll_admin_command(Cid::value_type cid) {
     }
 }
 
-std::expected<std::optional<CompletionQueueEntry>, ControllerDiagnostic>
+std::optional<Result<wire::CompletionEntry>>
 Controller::try_poll_admin_command(Cid::value_type cid) {
     if (!in_flight_cmds_.contains(cid)) {
-        return std::unexpected{ControllerDiagnostic{
+        return std::unexpected{Error{
             .reason = std::format("Polling for CID {}, which is not in flight", cid),
-            .severity = ControllerDiagnostic::Severity::ERROR
+            .severity = Error::Severity::ERROR
         }};
     }
 
@@ -207,14 +206,13 @@ void Controller::abandon_admin_command(Cid::value_type cid) {
     }
 }
 
-std::optional<ControllerDiagnostic>
-Controller::accept_completion(const CompletionQueueEntry& completion) {
+std::optional<Error> Controller::accept_completion(const wire::CompletionEntry& completion) {
     const auto it = in_flight_cmds_.find(completion.cid);
     if (it == in_flight_cmds_.end()) {
-        return ControllerDiagnostic{
+        return Error{
             .reason =
                 std::format("Completion for CID {}, which was never submitted", completion.cid),
-            .severity = ControllerDiagnostic::Severity::ERROR
+            .severity = Error::Severity::ERROR
         };
     }
 
@@ -226,13 +224,13 @@ Controller::accept_completion(const CompletionQueueEntry& completion) {
     }
 
     if (entry.result.has_value()) {
-        return ControllerDiagnostic{
+        return Error{
             .reason = std::format(
                 "Duplicate completion for CID {} (opcode {}), which was already completed",
                 completion.cid,
                 entry.cmd.opcode()
             ),
-            .severity = ControllerDiagnostic::Severity::ERROR
+            .severity = Error::Severity::ERROR
         };
     }
 
@@ -240,13 +238,13 @@ Controller::accept_completion(const CompletionQueueEntry& completion) {
     return std::nullopt;
 }
 
-std::optional<CompletionQueueEntry> Controller::take_completion(Cid::value_type cid) {
+std::optional<wire::CompletionEntry> Controller::take_completion(Cid::value_type cid) {
     const auto it = in_flight_cmds_.find(cid);
     if (it == in_flight_cmds_.end() || !it->second.result.has_value()) {
         return std::nullopt;
     }
 
-    const CompletionQueueEntry completion = *it->second.result;
+    const wire::CompletionEntry completion = *it->second.result;
     in_flight_cmds_.erase(it);
     return completion;
 }

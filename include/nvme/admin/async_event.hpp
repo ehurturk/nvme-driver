@@ -10,7 +10,7 @@
 namespace nvme::admin::commands {
 
 struct AsyncEventRequest {
-    CommonCommand build(std::uint16_t this_cid) const noexcept;
+    wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
 
     enum class AsynchronousEventType : std::uint8_t {
         ErrorStatus = 0b000,
@@ -31,7 +31,7 @@ struct AsyncEventRequest {
         DWRD event_specific_param;
     };
 
-    static Completion decode_completion(const CompletionQueueEntry& c);
+    static Completion decode_completion(const wire::CompletionEntry& c);
 
 private:
     using AET = utils::BitField<std::uint32_t, 0, 3>;

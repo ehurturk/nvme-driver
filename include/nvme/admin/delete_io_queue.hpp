@@ -19,11 +19,11 @@ namespace nvme::admin::commands {
 struct DeleteIoCq {
     std::uint16_t qid{};
 
-    CommonCommand build(std::uint16_t this_cid) const noexcept;
+    wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
 
     struct Completion {};
 
-    static Completion decode_completion(const CompletionQueueEntry&);
+    static Completion decode_completion(const wire::CompletionEntry&);
 
 private:
     // Identifier of the queue (SQ/DQ) to be deleted
@@ -39,11 +39,11 @@ static_assert(CommandDescriptor<DeleteIoCq>);
 struct DeleteIoSq {
     std::uint16_t qid{};
 
-    CommonCommand build(std::uint16_t this_cid) const noexcept;
+    wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
 
     struct Completion {};
 
-    static Completion decode_completion(const CompletionQueueEntry&);
+    static Completion decode_completion(const wire::CompletionEntry&);
 
 private:
     // Identifier of the queue (SQ/DQ) to be deleted

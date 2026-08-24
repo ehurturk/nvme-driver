@@ -17,22 +17,21 @@ class Controller;
 
 template<typename C>
 concept CommandDescriptor = std::default_initializable<C> &&
-                            requires(const C c, std::uint16_t cid, const CompletionQueueEntry& e) {
-                                { c.build(cid) } noexcept -> std::same_as<CommonCommand>;
+                            requires(const C c, std::uint16_t cid, const wire::CompletionEntry& e) {
+                                { c.build(cid) } noexcept -> std::same_as<wire::SubmissionEntry>;
                                 typename C::Completion;
                                 { C::decode_completion(e) } -> std::same_as<typename C::Completion>;
                             };
 
 struct InFlightCommand {
     Cid cid;
-    std::optional<CompletionQueueEntry> result;
-    CommonCommand cmd;
-    // set when the CommandPending for this command was dropped without consuming
-    // the result: the entry (and its CID) is freed as soon as the completion arrives
+    std::optional<wire::CompletionEntry> result;
+    wire::SubmissionEntry cmd;
+    
     bool abandoned = false;
 };
 
-struct ControllerDiagnostic {
+struct Error {
     enum class Severity {
         INFO,
         WARN,
@@ -43,11 +42,9 @@ struct ControllerDiagnostic {
     Severity severity;
 };
 
-// a move-only, one-shot handle to an in-flight admin command, vended by
-// Controller::submit_admin_command; the Command type parameter ties the
-// completion back to the decoder of the command that produced it, so a
-// completion can only ever be decoded as what was actually submitted.
-// NOTE: must not outlive the Controller it came from
+template<typename T>
+using Result = std::expected<T, Error>;
+
 template<CommandDescriptor Command>
 class CommandPending {
 public:
@@ -58,8 +55,6 @@ public:
 
     CommandPending& operator=(CommandPending&& other) noexcept;
 
-    // dropping an unconsumed handle abandons the command: the controller frees the
-    // CID slot once the (discarded) completion arrives
     ~CommandPending();
 
     Cid::value_type cid() const;
@@ -68,15 +63,13 @@ public:
     bool done() const;
 
     // non-blocking: nullopt means the command is still in flight
-    std::expected<std::optional<CompletionQueueEntry>, ControllerDiagnostic> poll();
+    std::optional<Result<wire::CompletionEntry>> poll();
 
-    // blocking: waits until the completion arrives or the admin timeout expires;
-    // idempotent once the completion has been consumed
-    std::expected<CompletionQueueEntry, ControllerDiagnostic> wait();
+    // blocking: waits until the completion arrives or the admin timeout expires
+    Result<wire::CompletionEntry> wait();
 
-    // blocking: waits, requires a success status, and decodes the completion with
-    // this command's own decoder; use wait() to inspect a raw (possibly failed) CQE
-    std::expected<typename Command::Completion, ControllerDiagnostic> result();
+    // blocking: waits and decodes the completion
+    Result<typename Command::Completion> result();
 
 private:
     friend class Controller;
@@ -85,11 +78,11 @@ private:
 
     void release();
 
-    ControllerDiagnostic empty_handle_diagnostic() const;
+    Error empty_handle_diagnostic() const;
 
     Controller* controller_ = nullptr;
     Cid::value_type cid_{};
-    std::optional<CompletionQueueEntry> completion_;
+    std::optional<wire::CompletionEntry> completion_;
 };
 
 }  // namespace nvme

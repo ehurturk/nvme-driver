@@ -15,13 +15,13 @@ struct Abort {
     std::uint16_t sqid{};
     std::uint16_t cid{};
 
-    CommonCommand build(std::uint16_t this_cid) const noexcept;
+    wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
 
     struct Completion {
         bool immediate_abort_not_performed;
     };
 
-    static Completion decode_completion(const CompletionQueueEntry& c);
+    static Completion decode_completion(const wire::CompletionEntry& c);
 
 private:
     using SQID = utils::BitField<DWRD, 0, 16>;

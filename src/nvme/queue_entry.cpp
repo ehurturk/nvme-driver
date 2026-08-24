@@ -4,10 +4,10 @@
 
 #include <cstdint>
 
-namespace nvme {
+namespace nvme::wire {
 
-CommonCommand CommonCommand::build(admin::Opcode opc, std::uint16_t cid, Psdt psdt) {
-    CommonCommand c{};
+SubmissionEntry SubmissionEntry::build(admin::Opcode opc, std::uint16_t cid, Psdt psdt) {
+    SubmissionEntry c{};
     c.cdw0 = utils::DwordBuilder<>{}
                  .set<OPC>(utils::to_underlying(opc))
                  .set<PSDT>(utils::to_underlying(psdt))
@@ -16,19 +16,19 @@ CommonCommand CommonCommand::build(admin::Opcode opc, std::uint16_t cid, Psdt ps
     return c;
 }
 
-std::uint8_t CommonCommand::opcode() const {
+std::uint8_t SubmissionEntry::opcode() const {
     return static_cast<std::uint8_t>(OPC::extract(cdw0));
 }
 
-std::uint16_t CommonCommand::cid() const {
+std::uint16_t SubmissionEntry::cid() const {
     return static_cast<std::uint16_t>(CID::extract(cdw0));
 }
 
-std::uint8_t CommonCommand::psdt() const {
+std::uint8_t SubmissionEntry::psdt() const {
     return static_cast<std::uint8_t>(PSDT::extract(cdw0));
 }
 
-std::uint8_t CommonCommand::fuse() const {
+std::uint8_t SubmissionEntry::fuse() const {
     return static_cast<std::uint8_t>(FUSE::extract(cdw0));
 }
 
@@ -68,8 +68,8 @@ CompletionStatus::operator int() const noexcept {
     return status;
 }
 
-bool CompletionQueueEntry::ok() const {
+bool CompletionEntry::ok() const {
     return status.succeeded();
 }
 
-}  // namespace nvme
+}  // namespace nvme::wire

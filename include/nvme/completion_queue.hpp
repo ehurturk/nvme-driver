@@ -16,7 +16,7 @@ template<class Kind, std::size_t N = QueueTraits<Kind>::depth>
 class CompletionQueue {
 public:
     using Traits = QueueTraits<Kind>;
-    using Entry = CompletionQueueEntry;
+    using Entry = wire::CompletionEntry;
 
     static constexpr std::size_t depth = N;
 
@@ -49,7 +49,7 @@ public:
         Entry* e = compat::load_object_from_bytes<Entry>(dst);
 
         std::uint16_t raw_status = utils::ReadVolatile(e->status.status);
-        CompletionStatus status{.status = raw_status};
+        wire::CompletionStatus status{.status = raw_status};
 
         if (status.phase() != expected_bit_) {
             return std::nullopt;

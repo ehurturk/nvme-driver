@@ -99,7 +99,7 @@ int main() {
             static_assert(number_of_iocqs >= 1 && number_of_iocqs < 65535);
 
             using SetNoQueues = nac::SetFeatures<nvme::admin::features::NumberOfQueues>;
-            std::expected<nvme::CompletionQueueEntry, nvme::ControllerDiagnostic> set_features =
+            nvme::Result<nvme::wire::CompletionEntry> set_features =
                 controller.execute_admin_command(
                     SetNoQueues{.feature = {.nsq = number_of_iosqs, .ncq = number_of_iocqs}}
                 );
@@ -118,8 +118,8 @@ int main() {
         {
             // Create a Create IO Completion Queue Command
             dma::DmaBuffer iocq_buf =
-                dma_heap.alloc(nvme::constants::IO_DEPTH * sizeof(nvme::CompletionQueueEntry));
-            std::expected<nvme::CompletionQueueEntry, nvme::ControllerDiagnostic> create_iocq =
+                dma_heap.alloc(nvme::constants::IO_DEPTH * sizeof(nvme::wire::CompletionEntry));
+            nvme::Result<nvme::wire::CompletionEntry> create_iocq =
                 controller.execute_admin_command(
                     nac::CreateIoCq{
                         .prp1 = iocq_buf.iova(),
@@ -145,8 +145,8 @@ int main() {
             // therefore should use prp lists
             // check CAP.CQR
             dma::DmaBuffer iosq_buf =
-                dma_heap.alloc(nvme::constants::IO_DEPTH * sizeof(nvme::CommonCommand));
-            std::expected<nvme::CompletionQueueEntry, nvme::ControllerDiagnostic> create_iosq =
+                dma_heap.alloc(nvme::constants::IO_DEPTH * sizeof(nvme::wire::SubmissionEntry));
+            nvme::Result<nvme::wire::CompletionEntry> create_iosq =
                 controller.execute_admin_command(
                     nac::CreateIoSq{
                         .prp1 = iosq_buf.iova(),

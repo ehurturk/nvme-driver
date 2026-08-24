@@ -13,6 +13,8 @@ namespace admin {
 enum class Opcode : std::uint8_t;
 }  // namespace admin
 
+namespace wire {
+
 struct DataPointer {
     std::uint64_t prp1;
     std::uint64_t prp2;
@@ -22,7 +24,7 @@ struct DataPointer {
     }
 };
 
-struct CommonCommand {
+struct SubmissionEntry {
     enum class Psdt : std::uint8_t {
         Prp = 0b00,
         Sgl1 = 0b01,
@@ -42,7 +44,7 @@ struct CommonCommand {
     DWRD cdw14;
     DWRD cdw15;
 
-    static CommonCommand build(admin::Opcode opc, std::uint16_t cid, Psdt psdt = Psdt::Prp);
+    static SubmissionEntry build(admin::Opcode opc, std::uint16_t cid, Psdt psdt = Psdt::Prp);
 
     std::uint8_t opcode() const;
 
@@ -95,7 +97,7 @@ private:
     using DNR = utils::BitField<std::uint16_t, 15, 1>;  // do not retry
 };
 
-struct CompletionQueueEntry {
+struct CompletionEntry {
     // Contents of Dword 0 and Dword 1 in a CompletionEntry are
     // command specific. If a command uses Dword 0 or Dwod 1, then
     // the definition of these dwords is contained with the associated
@@ -125,51 +127,53 @@ static_assert(
     "CompletionStatus should be 16-bytes in size"
 );
 
-static_assert(sizeof(CommonCommand) == 64, "SQE must be 64 bytes");
-static_assert(sizeof(CompletionQueueEntry) == 16, "CQE must be 16 bytes");
+static_assert(sizeof(SubmissionEntry) == 64, "SQE must be 64 bytes");
+static_assert(sizeof(CompletionEntry) == 16, "CQE must be 16 bytes");
 
-static_assert(std::is_standard_layout_v<CommonCommand>);
-static_assert(std::is_trivially_copyable_v<CommonCommand>);
+static_assert(std::is_standard_layout_v<SubmissionEntry>);
+static_assert(std::is_trivially_copyable_v<SubmissionEntry>);
 
-static_assert(std::is_standard_layout_v<CompletionQueueEntry>);
-static_assert(std::is_trivially_copyable_v<CompletionQueueEntry>);
+static_assert(std::is_standard_layout_v<CompletionEntry>);
+static_assert(std::is_trivially_copyable_v<CompletionEntry>);
 
-static_assert(offsetof(CommonCommand, cdw0) == 0);
-static_assert(offsetof(CommonCommand, nsid) == 4);
-static_assert(offsetof(CommonCommand, cdw2) == 8);
-static_assert(offsetof(CommonCommand, cdw3) == 12);
-static_assert(offsetof(CommonCommand, mptr) == 16);
-static_assert(offsetof(CommonCommand, dptr) == 24);
-static_assert(offsetof(CommonCommand, cdw10) == 40);
-static_assert(offsetof(CommonCommand, cdw11) == 44);
-static_assert(offsetof(CommonCommand, cdw12) == 48);
-static_assert(offsetof(CommonCommand, cdw13) == 52);
-static_assert(offsetof(CommonCommand, cdw14) == 56);
-static_assert(offsetof(CommonCommand, cdw15) == 60);
+static_assert(offsetof(SubmissionEntry, cdw0) == 0);
+static_assert(offsetof(SubmissionEntry, nsid) == 4);
+static_assert(offsetof(SubmissionEntry, cdw2) == 8);
+static_assert(offsetof(SubmissionEntry, cdw3) == 12);
+static_assert(offsetof(SubmissionEntry, mptr) == 16);
+static_assert(offsetof(SubmissionEntry, dptr) == 24);
+static_assert(offsetof(SubmissionEntry, cdw10) == 40);
+static_assert(offsetof(SubmissionEntry, cdw11) == 44);
+static_assert(offsetof(SubmissionEntry, cdw12) == 48);
+static_assert(offsetof(SubmissionEntry, cdw13) == 52);
+static_assert(offsetof(SubmissionEntry, cdw14) == 56);
+static_assert(offsetof(SubmissionEntry, cdw15) == 60);
 
-static_assert(offsetof(CompletionQueueEntry, completion_result) == 0);
-static_assert(offsetof(CompletionQueueEntry, sq_head) == 8);
-static_assert(offsetof(CompletionQueueEntry, sqid) == 10);
-static_assert(offsetof(CompletionQueueEntry, cid) == 12);
-static_assert(offsetof(CompletionQueueEntry, status) == 14);
+static_assert(offsetof(CompletionEntry, completion_result) == 0);
+static_assert(offsetof(CompletionEntry, sq_head) == 8);
+static_assert(offsetof(CompletionEntry, sqid) == 10);
+static_assert(offsetof(CompletionEntry, cid) == 12);
+static_assert(offsetof(CompletionEntry, status) == 14);
+
+}  // namespace wire
 
 }  // namespace nvme
 
 namespace std {
 template<>
-struct formatter<nvme::CompletionStatus> {
+struct formatter<nvme::wire::CompletionStatus> {
     constexpr auto parse(format_parse_context& ctx) {
         auto it = ctx.begin();
 
         // Only "{}" is supported; reject custom specifiers such as "{:x}".
         if (it != ctx.end() && *it != '}') {
-            throw format_error("invalid format specifier for nvme::CompletionStatus");
+            throw format_error("invalid format specifier for nvme::wire::CompletionStatus");
         }
 
         return it;
     }
 
-    auto format(const nvme::CompletionStatus& c, format_context& ctx) const {
+    auto format(const nvme::wire::CompletionStatus& c, format_context& ctx) const {
         return format_to(
             ctx.out(),
             "raw=0x{:04x}, "

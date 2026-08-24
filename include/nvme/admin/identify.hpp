@@ -115,14 +115,17 @@ public:
     };
 
     // TODO: based on the CNS set NSID, CNTID, CSI automatically
-    CommonCommand build(std::uint16_t this_cid) const noexcept {
+    wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept {
         // set CDW0.PSDT = 0x0 to indicate the use of PRPs for the transfer
-        CommonCommand c =
-            CommonCommand::build(Opcode::Identify, this_cid, CommonCommand::Psdt::Prp);
+        wire::SubmissionEntry c = wire::SubmissionEntry::build(
+            Opcode::Identify,
+            this_cid,
+            wire::SubmissionEntry::Psdt::Prp
+        );
 
         c.nsid = nsid;
         // use only prp1 as a 4 KB buffer fits exactly into a page, so no need to use prp2
-        c.dptr = DataPointer::prp(prp1);
+        c.dptr = wire::DataPointer::prp(prp1);
         c.cdw10 = utils::DwordBuilder<>{}
                       .set<CNS>(utils::to_underlying(cns))
                       .template set<CNTID>(cntid)
@@ -140,7 +143,7 @@ public:
     // to the DPTR. the data structure is 4096 bytes in size
     struct Completion {};
 
-    static Completion decode_completion(const CompletionQueueEntry&) {
+    static Completion decode_completion(const wire::CompletionEntry&) {
         return Completion{};
     }
 

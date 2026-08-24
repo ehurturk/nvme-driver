@@ -2,10 +2,10 @@
 
 namespace nvme::admin::commands {
 
-CommonCommand CreateIoCq::build(std::uint16_t this_cid) const noexcept {
-    CommonCommand c = CommonCommand::build(Opcode::CreateIoCq, this_cid);
+wire::SubmissionEntry CreateIoCq::build(std::uint16_t this_cid) const noexcept {
+    wire::SubmissionEntry c = wire::SubmissionEntry::build(Opcode::CreateIoCq, this_cid);
 
-    c.dptr = DataPointer::prp(prp1);
+    c.dptr = wire::DataPointer::prp(prp1);
     c.cdw10 = utils::DwordBuilder<>{}.set<QID>(qid).set<QSIZE>(utils::to_zero_based(qsize)).get();
     c.cdw11 = utils::DwordBuilder<>{}
                   .set<PC>(physically_contiguous)
@@ -16,14 +16,14 @@ CommonCommand CreateIoCq::build(std::uint16_t this_cid) const noexcept {
     return c;
 }
 
-CreateIoCq::Completion CreateIoCq::decode_completion(const CompletionQueueEntry& c) {
+CreateIoCq::Completion CreateIoCq::decode_completion(const wire::CompletionEntry& c) {
     return Completion{.status = c.status.status_code()};
 }
 
-CommonCommand CreateIoSq::build(std::uint16_t this_cid) const noexcept {
-    CommonCommand c = CommonCommand::build(Opcode::CreateIoSq, this_cid);
+wire::SubmissionEntry CreateIoSq::build(std::uint16_t this_cid) const noexcept {
+    wire::SubmissionEntry c = wire::SubmissionEntry::build(Opcode::CreateIoSq, this_cid);
 
-    c.dptr = DataPointer::prp(prp1);
+    c.dptr = wire::DataPointer::prp(prp1);
     c.cdw10 = utils::DwordBuilder<>{}.set<QID>(qid).set<QSIZE>(utils::to_zero_based(qsize)).get();
     c.cdw11 = utils::DwordBuilder<>{}
                   .set<PC>(physically_contiguous)
@@ -35,7 +35,7 @@ CommonCommand CreateIoSq::build(std::uint16_t this_cid) const noexcept {
     return c;
 }
 
-CreateIoSq::Completion CreateIoSq::decode_completion(const CompletionQueueEntry&) {
+CreateIoSq::Completion CreateIoSq::decode_completion(const wire::CompletionEntry&) {
     return Completion{};
 }
 

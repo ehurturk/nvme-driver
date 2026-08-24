@@ -2,11 +2,11 @@
 
 namespace nvme::admin::commands {
 
-CommonCommand AsyncEventRequest::build(std::uint16_t this_cid) const noexcept {
-    return CommonCommand::build(Opcode::AsyncEvent, this_cid);
+wire::SubmissionEntry AsyncEventRequest::build(std::uint16_t this_cid) const noexcept {
+    return wire::SubmissionEntry::build(Opcode::AsyncEvent, this_cid);
 }
 
-AsyncEventRequest::Completion AsyncEventRequest::decode_completion(const CompletionQueueEntry& c) {
+AsyncEventRequest::Completion AsyncEventRequest::decode_completion(const wire::CompletionEntry& c) {
     Completion cl{};
     DWRD dw0 = c.completion_result.cdw0;
     cl.type = static_cast<AsynchronousEventType>(AET::extract(dw0));

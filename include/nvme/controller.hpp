@@ -55,7 +55,7 @@ public:
 
     // submits an admin command and blocks until its own completion arrives
     template<CommandDescriptor Command>
-    std::expected<CompletionQueueEntry, ControllerDiagnostic> execute_admin_command(Command cmd) {
+    Result<wire::CompletionEntry> execute_admin_command(Command cmd) {
         auto submitted = submit_admin_command(std::move(cmd));
         if (!submitted) {
             return std::unexpected{submitted.error()};
@@ -67,12 +67,11 @@ public:
     // pushes the command into the admin SQ and returns a CommandPending handle tied
     // to this command's type; dropping the handle abandons the command
     template<CommandDescriptor Command>
-    std::expected<CommandPending<Command>, ControllerDiagnostic>
-    submit_admin_command(Command command) {
+    Result<CommandPending<Command>> submit_admin_command(Command command) {
         Cid cmd_id = admin_cid_allocator_.allocate();
         auto cid_val = cmd_id.get();
 
-        CommonCommand cmd = command.build(cid_val);
+        wire::SubmissionEntry cmd = command.build(cid_val);
 
         auto& asq = admin_queue_pair_.sq();
         asq.push(cmd);  // copies the command into the submission queue's ring queue
@@ -84,9 +83,9 @@ public:
 
         if (!inserted) {
             // we have a problem: we submit a command but now we got it again?
-            return std::unexpected{ControllerDiagnostic{
+            return std::unexpected{Error{
                 .reason = "Encountered an already submitted CID",
-                .severity = ControllerDiagnostic::Severity::ERROR
+                .severity = Error::Severity::ERROR
             }};
         }
 
@@ -100,19 +99,18 @@ private:
     friend class CommandPending;
 
     // blockingly polls the admin CQ until the completion for cid arrives or the timeout expires
-    std::expected<CompletionQueueEntry, ControllerDiagnostic> poll_admin_command(Cid::value_type cid);
+    Result<wire::CompletionEntry> poll_admin_command(Cid::value_type cid);
 
     // non-blockingly drains whatever completions are visible on the admin cq
-    std::expected<std::optional<CompletionQueueEntry>, ControllerDiagnostic>
-    try_poll_admin_command(Cid::value_type cid);
+    std::optional<Result<wire::CompletionEntry>> try_poll_admin_command(Cid::value_type cid);
 
     void abandon_admin_command(Cid::value_type cid);
 
     // mark completion's cid as completed and write its result to in flight command map
-    std::optional<ControllerDiagnostic> accept_completion(const CompletionQueueEntry& completion);
+    std::optional<Error> accept_completion(const wire::CompletionEntry& completion);
 
     // return the completion queue entry for a given cid and release that cid
-    std::optional<CompletionQueueEntry> take_completion(Cid::value_type cid);
+    std::optional<wire::CompletionEntry> take_completion(Cid::value_type cid);
 
     bool wait_for(std::predicate auto&& predicate, std::chrono::milliseconds timeout) {
         auto deadline = std::chrono::steady_clock::now() + timeout;
@@ -179,8 +177,7 @@ bool CommandPending<Command>::done() const {
 }
 
 template<CommandDescriptor Command>
-std::expected<std::optional<CompletionQueueEntry>, ControllerDiagnostic>
-CommandPending<Command>::poll() {
+std::optional<Result<wire::CompletionEntry>> CommandPending<Command>::poll() {
     if (completion_.has_value()) {
         return completion_;
     }
@@ -196,7 +193,7 @@ CommandPending<Command>::poll() {
 }
 
 template<CommandDescriptor Command>
-std::expected<CompletionQueueEntry, ControllerDiagnostic> CommandPending<Command>::wait() {
+Result<wire::CompletionEntry> CommandPending<Command>::wait() {
     if (completion_.has_value()) {
         return *completion_;
     }
@@ -212,17 +209,16 @@ std::expected<CompletionQueueEntry, ControllerDiagnostic> CommandPending<Command
 }
 
 template<CommandDescriptor Command>
-std::expected<typename Command::Completion, ControllerDiagnostic>
-CommandPending<Command>::result() {
+Result<typename Command::Completion> CommandPending<Command>::result() {
     auto waited = wait();
     if (!waited.has_value()) {
         return std::unexpected{std::move(waited.error())};
     }
 
     if (!waited->ok()) {
-        return std::unexpected{ControllerDiagnostic{
+        return std::unexpected{Error{
             .reason = std::format("CID {} completed with error status: {}", cid_, waited->status),
-            .severity = ControllerDiagnostic::Severity::ERROR
+            .severity = Error::Severity::ERROR
         }};
     }
 
@@ -243,10 +239,10 @@ void CommandPending<Command>::release() {
 }
 
 template<CommandDescriptor Command>
-ControllerDiagnostic CommandPending<Command>::empty_handle_diagnostic() const {
-    return ControllerDiagnostic{
+Error CommandPending<Command>::empty_handle_diagnostic() const {
+    return Error{
         .reason = std::format("CommandPending for CID {} is empty (moved-from)", cid_),
-        .severity = ControllerDiagnostic::Severity::ERROR
+        .severity = Error::Severity::ERROR
     };
 }
 

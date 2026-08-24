@@ -10,7 +10,7 @@ DWRD NumberOfQueues::value() const noexcept {
 }
 
 NumberOfQueues::Completion
-NumberOfQueues::decode_completion(const CompletionQueueEntry& c) noexcept {
+NumberOfQueues::decode_completion(const wire::CompletionEntry& c) noexcept {
     using NSQA = utils::BitField<DWRD, 0, 16>;   // # of IOSQ allocated
     using NCQA = utils::BitField<DWRD, 16, 16>;  // # of IOCQ allocated
 
@@ -29,7 +29,7 @@ DWRD InterruptCoalescing::value() const noexcept {
 }
 
 InterruptCoalescing::Completion
-InterruptCoalescing::decode_completion(const CompletionQueueEntry&) noexcept {
+InterruptCoalescing::decode_completion(const wire::CompletionEntry&) noexcept {
     return Completion{};
 }
 

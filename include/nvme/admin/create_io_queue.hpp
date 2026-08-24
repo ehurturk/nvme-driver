@@ -37,13 +37,13 @@ struct CreateIoCq {
     bool interrupts_enabled = false;
     bool physically_contiguous = true;
 
-    CommonCommand build(std::uint16_t this_cid) const noexcept;
+    wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
 
     struct Completion {
         std::uint16_t status;
     };
 
-    static Completion decode_completion(const CompletionQueueEntry& c);
+    static Completion decode_completion(const wire::CompletionEntry& c);
 
 private:
     using QID = utils::BitField<DWRD, 0, 16>;
@@ -90,11 +90,11 @@ struct CreateIoSq {
     bool physically_contiguous = true;
     std::uint16_t nvmsetid = 0;
 
-    CommonCommand build(std::uint16_t this_cid) const noexcept;
+    wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
 
     struct Completion {};
 
-    static Completion decode_completion(const CompletionQueueEntry&);
+    static Completion decode_completion(const wire::CompletionEntry&);
 
 private:
     using QID = utils::BitField<DWRD, 0, 16>;

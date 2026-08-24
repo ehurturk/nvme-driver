@@ -38,10 +38,10 @@ struct SetFeatures {
     std::uint64_t prp1 = 0;
     std::uint8_t uuid_index = 0;
 
-    CommonCommand build(std::uint16_t this_cid) const noexcept {
-        CommonCommand c = CommonCommand::build(Opcode::SetFeatures, this_cid);
+    wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept {
+        wire::SubmissionEntry c = wire::SubmissionEntry::build(Opcode::SetFeatures, this_cid);
 
-        c.dptr = DataPointer::prp(prp1);
+        c.dptr = wire::DataPointer::prp(prp1);
         c.cdw10 = utils::DwordBuilder<>{}
                       .set<FID>(utils::to_underlying(F::id))
                       .template set<SV>(save)
@@ -54,7 +54,7 @@ struct SetFeatures {
 
     using Completion = typename F::Completion;
 
-    static Completion decode_completion(const CompletionQueueEntry& e) {
+    static Completion decode_completion(const wire::CompletionEntry& e) {
         return F::decode_completion(e);
     }
 
@@ -70,10 +70,10 @@ struct GetFeatures {
     std::uint64_t prp1 = 0;
     std::uint8_t uuid_index = 0;
 
-    CommonCommand build(std::uint16_t this_cid) const noexcept {
-        CommonCommand c = CommonCommand::build(Opcode::GetFeatures, this_cid);
+    wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept {
+        wire::SubmissionEntry c = wire::SubmissionEntry::build(Opcode::GetFeatures, this_cid);
 
-        c.dptr = DataPointer::prp(prp1);
+        c.dptr = wire::DataPointer::prp(prp1);
         c.cdw10 = utils::DwordBuilder<>{}
                       .set<FID>(utils::to_underlying(F::id))
                       .template set<SEL>(utils::to_underlying(sel))
@@ -85,7 +85,7 @@ struct GetFeatures {
 
     using Completion = typename F::Completion;
 
-    static Completion decode_completion(const CompletionQueueEntry& e) {
+    static Completion decode_completion(const wire::CompletionEntry& e) {
         return F::decode_completion(e);
     }
 
