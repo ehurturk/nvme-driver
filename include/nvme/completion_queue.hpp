@@ -1,23 +1,22 @@
 #pragma once
 
-#include <atomic>
-#include <bit>
-#include <cassert>
-#include <optional>
-
 #include "dma/buffer.hpp"
 #include "lifetime.hpp"
 #include "nvme/queue_entry.hpp"
 #include "nvme/traits.hpp"
 #include "utils.hpp"
 
-namespace nvme
-{
-template <class Kind, std::size_t N = QueueTraits<Kind>::depth> class CompletionQueue
-{
-  public:
+#include <atomic>
+#include <bit>
+#include <cassert>
+#include <optional>
+
+namespace nvme {
+template<class Kind, std::size_t N = QueueTraits<Kind>::depth>
+class CompletionQueue {
+public:
     using Traits = QueueTraits<Kind>;
-    using Entry  = CompletionEntry;
+    using Entry = CompletionQueueEntry;
 
     static constexpr std::size_t depth = N;
 
@@ -30,14 +29,12 @@ template <class Kind, std::size_t N = QueueTraits<Kind>::depth> class Completion
     static_assert(depth <= 65536);
 
     CompletionQueue(dma::DmaView memory, volatile std::uint32_t* head_doorbell)
-            : memory_{memory}, doorbell_{head_doorbell}, expected_bit_{1}
-    {
+        : memory_{memory}, doorbell_{head_doorbell}, expected_bit_{1} {
         assert(memory_.size >= depth * sizeof(Entry));
     }
 
     // non blocking poll
-    std::optional<Entry> poll()
-    {
+    std::optional<Entry> poll() {
         //              H   T
         //  SQ:   | x | x | x |   |   |   |   |   |   |   |   |   |
         //  CQ:   | 1 | 1 |   |   |   |   |   |   |   |   |   |   |
@@ -51,8 +48,8 @@ template <class Kind, std::size_t N = QueueTraits<Kind>::depth> class Completion
 
         Entry* e = compat::load_object_from_bytes<Entry>(dst);
 
-        std::uint16_t raw_status = utils::ReadVolatile(e->status);
-        CompletionStatus status { .status = raw_status };
+        std::uint16_t raw_status = utils::ReadVolatile(e->status.status);
+        CompletionStatus status{.status = raw_status};
 
         if (status.phase() != expected_bit_) {
             return std::nullopt;
@@ -66,8 +63,9 @@ template <class Kind, std::size_t N = QueueTraits<Kind>::depth> class Completion
         head_ = (head_ + 1) & (depth - 1);
 
         // on each queue rollover, the phase bit should flip
-        if (head_ == 0)
+        if (head_ == 0) {
             expected_bit_ ^= 1;
+        }
 
         // notify the controller for a read of cqe
         ring_head_doorbell();
@@ -75,22 +73,20 @@ template <class Kind, std::size_t N = QueueTraits<Kind>::depth> class Completion
         return cqe;
     }
 
-    std::size_t head() const
-    {
+    std::size_t head() const {
         return head_;
     }
 
-  private:
-    void ring_head_doorbell()
-    {
+private:
+    void ring_head_doorbell() {
         *doorbell_ = static_cast<std::uint32_t>(head_);
     }
 
-  private:
-    dma::DmaView            memory_;
+private:
+    dma::DmaView memory_;
     volatile std::uint32_t* doorbell_;
-    std::size_t             head_{};
+    std::size_t head_{};
 
     std::uint8_t expected_bit_;
 };
-} // namespace nvme
+}  // namespace nvme

@@ -1,33 +1,32 @@
 #pragma once
 
-#include <cstddef>
-
 #include "nvme/spec.hpp"
 
-namespace nvme
-{
+#include <cstddef>
+
+namespace nvme {
 // Tags for traits
-struct AdminQueueKind
-{};
-struct IOQueueKind
-{};
+struct AdminQueueKind {};
+
+struct IOQueueKind {};
 
 struct CommonCommand;
-struct CompletionEntry;
+struct CompletionQueueEntry;
 
-template <class Kind> struct QueueTraits;
+template<class Kind>
+struct QueueTraits;
 
-template <> struct QueueTraits<AdminQueueKind>
-{
-    using SubmissionEntry              = CommonCommand;
-    using CompletionEntry              = ::nvme::CompletionEntry;
+template<>
+struct QueueTraits<AdminQueueKind> {
+    using SubmissionEntry = CommonCommand;
+    using CompletionEntry = ::nvme::CompletionQueueEntry;
     static constexpr std::size_t depth = constants::AQ_DEPTH;
 };
 
-template <> struct QueueTraits<IOQueueKind>
-{
-    using SubmissionEntry              = CommonCommand;
-    using CompletionEntry              = ::nvme::CompletionEntry;
+template<>
+struct QueueTraits<IOQueueKind> {
+    using SubmissionEntry = CommonCommand;
+    using CompletionEntry = ::nvme::CompletionQueueEntry;
     static constexpr std::size_t depth = constants::IO_DEPTH;
 };
-} // namespace nvme
+}  // namespace nvme

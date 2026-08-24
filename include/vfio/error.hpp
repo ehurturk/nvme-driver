@@ -3,13 +3,12 @@
 #include <cerrno>
 #include <system_error>
 
-namespace vfio
-{
+namespace vfio {
 
-inline void check(bool failed, const char* what)
-{
-    if (failed)
+inline void check(bool failed, const char* what) {
+    if (failed) {
         throw std::system_error(errno, std::generic_category(), what);
+    }
 }
 
-} // namespace vfio
+}  // namespace vfio

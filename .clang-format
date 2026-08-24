@@ -1,66 +1,114 @@
-BasedOnStyle: LLVM
+
 Language: Cpp
+BasedOnStyle: LLVM
 Standard: Latest
 
-# 1. Line Length
-# 120 is standard for modern C++ to accommodate templates and namespaces.
-ColumnLimit: 120
-
-# 2. Indentation & Tabs
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
-ContinuationIndentWidth: 8
-ConstructorInitializerIndentWidth: 8
+ContinuationIndentWidth: 4
+ConstructorInitializerIndentWidth: 4
+AccessModifierOffset: -4
+IndentCaseLabels: true
+IndentCaseBlocks: false
+IndentPPDirectives: AfterHash
+IndentExternBlock: NoIndent
+IndentRequiresClause: true
+NamespaceIndentation: None
+LambdaBodyIndentation: Signature
 
-# 3. Brace Wrapping (Your Custom Preference)
-BreakBeforeBraces: Custom
-BraceWrapping:
-  AfterClass: true
-  AfterControlStatement: false # Keeps if, while, for braces on the same line
-  AfterEnum: true
-  AfterFunction: true
-  AfterNamespace: true
-  AfterStruct: true
-  AfterUnion: true
-  AfterExternBlock: true
-  BeforeCatch: false
-  BeforeElse: false
-  SplitEmptyFunction: false
-  SplitEmptyRecord: false
-  SplitEmptyNamespace: false
+ColumnLimit: 100
 
-# 4. Alignment
-# Extremely useful for reading large packets of data or struct declarations.
-AlignConsecutiveAssignments: true
-AlignConsecutiveDeclarations: true
-AlignConsecutiveMacros: true
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: Empty
+AllowShortLoopsOnASingleLine: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+BinPackArguments: false
+BinPackParameters: false
+PackConstructorInitializers: NextLine
+AlignAfterOpenBracket: BlockIndent
+
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+SeparateDefinitionBlocks: Always
+EmptyLineBeforeAccessModifier: LogicalBlock
+EmptyLineAfterAccessModifier: Never
+
+BreakBeforeBraces: Attach
+InsertBraces: true
+Cpp11BracedListStyle: true
+
+AlwaysBreakTemplateDeclarations: Yes
+BreakBeforeBinaryOperators: None
+BreakBeforeTernaryOperators: true
+BreakBeforeConceptDeclarations: Always
+BreakConstructorInitializers: BeforeColon
+BreakInheritanceList: BeforeColon
+BreakStringLiterals: true
+RequiresClausePosition: OwnLine
+RequiresExpressionIndentation: OuterScope
+AlwaysBreakAfterReturnType: None
+
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignConsecutiveMacros: Consecutive
+AlignEscapedNewlines: Left
 AlignOperands: Align
 AlignTrailingComments: true
-AlignAfterOpenBracket: Align
-
-# 5. Idiomatic C++ Pointers and References
-# Shifting from C style (int *p) to C++ style (int* p).
+DerivePointerAlignment: false
 PointerAlignment: Left
-ReferenceAlignment: Left
+ReferenceAlignment: Pointer
+QualifierAlignment: Leave
 
-# 6. Modern C++20 / C++23 Handling
-# Ensures templates, concepts, and requires clauses don't become an unreadable mess.
-RequiresClausePosition: OwnLine
-IndentRequiresClause: true
-BreakBeforeConceptDeclarations: true
-
-# 7. Spaces and Parentheses
+SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: false
+SpaceAfterTemplateKeyword: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCaseColon: false
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
 SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 2
+SpacesInAngles: Never
+SpacesInContainerLiterals: false
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
-SpaceInEmptyParentheses: false
+BitFieldColonSpacing: Both
 
-# 8. Quality of Life Formatting
-# Automatically adds // namespace X to the end of namespaces.
-FixNamespaceComments: true
 SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IncludeIsMainRegex: '(_test|_tests)?$'
+IncludeCategories:
+  - Regex: '^"'
+    Priority: 2
+  - Regex: '^<.*\.(h|hpp|hh|hxx)>$'
+    Priority: 3
+  - Regex: '^<[[:alnum:]_]+>$'
+    Priority: 4
+  - Regex: '.*'
+    Priority: 3
+
+FixNamespaceComments: true
+ShortNamespaceLines: 0
+SortUsingDeclarations: LexicographicNumeric
+InsertNewlineAtEOF: true
+KeepEmptyLinesAtEOF: false
 ReflowComments: true
-AllowShortIfStatementsOnASingleLine: false
-AllowShortLoopsOnASingleLine: false
-AllowShortFunctionsOnASingleLine: None
+CompactNamespaces: false
+IndentGotoLabels: false
+
+PenaltyBreakAssignment: 2
+PenaltyBreakBeforeFirstCallParameter: 19
+PenaltyBreakComment: 300
+PenaltyBreakFirstLessLess: 120
+PenaltyBreakString: 1000
+PenaltyExcessCharacter: 1000000
+PenaltyReturnTypeOnItsOwnLine: 60
