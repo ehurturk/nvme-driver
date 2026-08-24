@@ -13,15 +13,16 @@
 namespace nvme::admin {
 
 // controller namespace
+// clang-format off
 enum class IdentifyCns : std::uint8_t {
     Namespace = 0x00,           // NSID: Y | CNTID: N | CSI: N
     Controller = 0x01,          // NSID: N | CNTID: N | CSI: N
     ActiveNamespaceIds = 0x02,  // NSID: Y | CNTID: N | CSI: N
     NSIDList = 0x03,            // NSID: Y | CNTID: N | CSI: N
-    NVMSetList =
-        0x04,  // NSID: N | CNTID: N | CSI: N
-               // TODO: add more as required from Figure 326: Identify - CNS Values (spec page 343)
+    NVMSetList = 0x04,          // NSID: N | CNTID: N | CSI: N
+    // TODO: add more as required from Figure 326: Identify - CNS Values (spec page 343)
 };
+// clang-format on
 
 class IdentifyControllerData;
 class IdentifyNamespaceData;
@@ -52,7 +53,6 @@ public:
     std::uint16_t vid() const;
 
     std::string_view serial() const;
-
     std::string_view model() const;
 
     std::uint8_t mdts() const;
@@ -81,7 +81,41 @@ private:
     alignas(8) std::array<std::byte, SIZE> data_;  // 4 KB buffer
 };
 
-class IdentifyNamespaceData {};
+class IdentifyNamespaceData {
+public:
+    static constexpr std::size_t SIZE = 4096;
+
+    struct LbaFormat {
+        std::uint16_t metadata_size;
+        std::uint8_t lba_data_shift;
+        std::uint8_t relative_performance;
+    };
+
+    explicit IdentifyNamespaceData(const std::byte* src);
+
+    std::uint64_t nsze() const;
+    std::uint64_t ncap() const;
+    std::uint64_t nuse() const;
+    std::uint8_t nlbaf() const;
+    std::uint8_t flbas() const;
+    std::uint8_t active_lba_format_index() const;
+
+    LbaFormat lba_format(std::uint8_t index) const;
+    LbaFormat active_lba_format() const;
+
+    std::uint32_t lba_size_bytes() const;
+
+private:
+    template<typename T>
+    T read(std::size_t offset) const {
+        static_assert(std::is_trivially_copyable_v<T>);
+        T v;
+        std::memcpy(&v, data_.data() + offset, sizeof(T));
+        return v;
+    }
+
+    alignas(8) std::array<std::byte, SIZE> data_;
+};
 
 template<typename T, typename Expected>
 concept SameAsUnqualified = std::same_as<std::remove_cvref_t<T>, Expected>;

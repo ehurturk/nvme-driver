@@ -21,12 +21,13 @@ struct BitField {
 
     using value_type = T;
 
-    static constexpr T value_mask = Width == bits ? ~T{0} : ((T{1} << Width) - T{1});
+    static constexpr T value_mask =
+        Width == bits ? static_cast<T>(~T{0}) : static_cast<T>((T{1} << Width) - T{1});
 
-    static constexpr T mask = value_mask << Offset;
+    static constexpr T mask = static_cast<T>(value_mask << Offset);
 
     static constexpr T extract(T v) noexcept {
-        return (v >> Offset) & value_mask;
+        return static_cast<T>((v >> Offset) & value_mask);
     }
 
     template<typename U>

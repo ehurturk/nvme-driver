@@ -134,6 +134,14 @@ AdminQueuePair& Controller::admin_queues() {
     return admin_queue_pair_;
 }
 
+std::uint32_t Controller::max_io_queue_entries() const {
+    return static_cast<std::uint32_t>(cap::MQES::extract(regs_.cap())) + 1;
+}
+
+bool Controller::requires_contiguous_queues() const {
+    return cap::CQR::extract(regs_.cap()) == 1;
+}
+
 Result<wire::CompletionEntry> Controller::poll_admin_command(Cid::value_type cid) {
     if (!in_flight_cmds_.contains(cid)) {
         return std::unexpected{Error{

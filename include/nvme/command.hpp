@@ -27,7 +27,7 @@ struct InFlightCommand {
     Cid cid;
     std::optional<wire::CompletionEntry> result;
     wire::SubmissionEntry cmd;
-    
+
     bool abandoned = false;
 };
 
@@ -52,7 +52,6 @@ public:
     CommandPending& operator=(const CommandPending&) = delete;
 
     CommandPending(CommandPending&& other) noexcept;
-
     CommandPending& operator=(CommandPending&& other) noexcept;
 
     ~CommandPending();

@@ -94,6 +94,10 @@ public:
 
     AdminQueuePair& admin_queues();
 
+    std::uint32_t max_io_queue_entries() const;
+
+    bool requires_contiguous_queues() const;
+
 private:
     template<CommandDescriptor Command>
     friend class CommandPending;

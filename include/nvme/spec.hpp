@@ -118,6 +118,14 @@ static constexpr std::size_t ADM_CQES = 4;
 static constexpr std::size_t IO_SQES = 6;
 static constexpr std::size_t IO_CQES = 4;
 
+// number of queues:
+constexpr int NR_IO_SQ = 64;
+constexpr int NR_IO_CQ = 64;
+
+static_assert(NR_IO_SQ >= 1 && NR_IO_SQ < 65535);
+static_assert(NR_IO_CQ >= 1 && NR_IO_CQ < 65535);
+
+
 // Linux uses 60s for admin cmd timeout asw
 static constexpr std::chrono::seconds ADMIN_CMD_TIMEOUT{60};
 }  // namespace constants
@@ -143,6 +151,7 @@ constexpr std::size_t DOORBELL_BASE = 0x1000;
 // Controller Capabilities
 namespace cap {
 using MQES = utils::BitField<uint64_t, 0, 16>;  // Max Queue Entries
+using CQR = utils::BitField<uint64_t, 16, 1>;   // Contiguous Queues Required
 // 1: Vendor specific
 // 0: Weighted Round Robinw with Urgent Priority Class
 using AMS = utils::BitField<uint64_t, 17, 2>;      // Arbitration Mechanism Supported
