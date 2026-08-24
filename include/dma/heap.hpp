@@ -9,14 +9,11 @@ namespace dma {
 
 class DmaHeap {
 public:
-    explicit DmaHeap(vfio::VfioContainer& container) : container_{&container} {
-    }
+    explicit DmaHeap(vfio::VfioContainer& container);
 
     // return a dma buffer with page-rounded size
     // NOTE: this is prone to fragmentation, in the future a DMA allocator may be used
-    DmaBuffer alloc(std::size_t bytes) {
-        return DmaBuffer{*container_, utils::page_round_up(bytes)};
-    }
+    DmaBuffer alloc(std::size_t bytes);
 
 private:
     vfio::VfioContainer* container_;

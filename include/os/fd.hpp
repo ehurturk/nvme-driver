@@ -13,38 +13,20 @@ public:
 
     UniqueFd() = default;
 
-    explicit UniqueFd(int fd) : fd_{fd} {
-    }
+    explicit UniqueFd(int fd);
 
-    ~UniqueFd() {
-        if (fd_ >= 0) {
-            ::close(fd_);
-        }
-    }
+    ~UniqueFd();
 
     UniqueFd(const UniqueFd&) = delete;
     UniqueFd& operator=(const UniqueFd&) = delete;
 
-    UniqueFd(UniqueFd&& o) noexcept : fd_{std::exchange(o.fd_, nfd)} {
-    }
+    UniqueFd(UniqueFd&& o) noexcept;
 
-    UniqueFd& operator=(UniqueFd&& o) noexcept {
-        if (this != &o) {
-            if (fd_ >= 0) {
-                ::close(fd_);
-            }
-            fd_ = std::exchange(o.fd_, nfd);
-        }
-        return *this;
-    }
+    UniqueFd& operator=(UniqueFd&& o) noexcept;
 
-    int get() const {
-        return fd_;
-    }
+    int get() const;
 
-    bool valid() const {
-        return fd_ >= 0;
-    }
+    bool valid() const;
 
 private:
     int fd_{nfd};

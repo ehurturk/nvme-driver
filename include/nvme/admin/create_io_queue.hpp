@@ -37,28 +37,13 @@ struct CreateIoCq {
     bool interrupts_enabled = false;
     bool physically_contiguous = true;
 
-    CommonCommand build(std::uint16_t this_cid) const noexcept {
-        CommonCommand c = CommonCommand::build(Opcode::CreateIoCq, this_cid);
-
-        c.dptr = DataPointer::prp(prp1);
-        c.cdw10 =
-            utils::DwordBuilder<>{}.set<QID>(qid).set<QSIZE>(utils::to_zero_based(qsize)).get();
-        c.cdw11 = utils::DwordBuilder<>{}
-                      .set<PC>(physically_contiguous)
-                      .set<IEN>(interrupts_enabled)
-                      .set<IV>(interrupt_vector)
-                      .get();
-
-        return c;
-    }
+    CommonCommand build(std::uint16_t this_cid) const noexcept;
 
     struct Completion {
         std::uint16_t status;
     };
 
-    static Completion decode_completion(const CompletionQueueEntry& c) {
-        return Completion{.status = c.status.status_code()};
-    }
+    static Completion decode_completion(const CompletionQueueEntry& c);
 
 private:
     using QID = utils::BitField<DWRD, 0, 16>;
@@ -105,27 +90,11 @@ struct CreateIoSq {
     bool physically_contiguous = true;
     std::uint16_t nvmsetid = 0;
 
-    CommonCommand build(std::uint16_t this_cid) const noexcept {
-        CommonCommand c = CommonCommand::build(Opcode::CreateIoSq, this_cid);
-
-        c.dptr = DataPointer::prp(prp1);
-        c.cdw10 =
-            utils::DwordBuilder<>{}.set<QID>(qid).set<QSIZE>(utils::to_zero_based(qsize)).get();
-        c.cdw11 = utils::DwordBuilder<>{}
-                      .set<PC>(physically_contiguous)
-                      .set<QPRIO>(utils::to_underlying(priority))
-                      .set<CQID>(cqid)
-                      .get();
-        c.cdw12 = utils::DwordBuilder<>{}.set<NVMSETID>(nvmsetid).get();
-
-        return c;
-    }
+    CommonCommand build(std::uint16_t this_cid) const noexcept;
 
     struct Completion {};
 
-    static Completion decode_completion(const CompletionQueueEntry&) {
-        return Completion{};
-    }
+    static Completion decode_completion(const CompletionQueueEntry&);
 
 private:
     using QID = utils::BitField<DWRD, 0, 16>;

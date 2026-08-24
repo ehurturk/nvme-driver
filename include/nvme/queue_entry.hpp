@@ -42,31 +42,15 @@ struct CommonCommand {
     DWRD cdw14;
     DWRD cdw15;
 
-    static CommonCommand build(admin::Opcode opc, std::uint16_t cid, Psdt psdt = Psdt::Prp) {
-        CommonCommand c{};
-        c.cdw0 = utils::DwordBuilder<>{}
-                     .set<OPC>(utils::to_underlying(opc))
-                     .set<PSDT>(utils::to_underlying(psdt))
-                     .set<CID>(cid)
-                     .get();
-        return c;
-    }
+    static CommonCommand build(admin::Opcode opc, std::uint16_t cid, Psdt psdt = Psdt::Prp);
 
-    std::uint8_t opcode() const {
-        return static_cast<std::uint8_t>(OPC::extract(cdw0));
-    }
+    std::uint8_t opcode() const;
 
-    std::uint16_t cid() const {
-        return static_cast<std::uint16_t>(CID::extract(cdw0));
-    }
+    std::uint16_t cid() const;
 
-    std::uint8_t psdt() const {
-        return static_cast<std::uint8_t>(PSDT::extract(cdw0));
-    }
+    std::uint8_t psdt() const;
 
-    std::uint8_t fuse() const {
-        return static_cast<std::uint8_t>(FUSE::extract(cdw0));
-    }
+    std::uint8_t fuse() const;
 
 private:
     using OPC = utils::BitField<DWRD, 0, 8>;
@@ -86,41 +70,21 @@ struct CompletionStatus {
 
     std::uint16_t status;
 
-    inline bool succeeded() const {
-        // SC bits are bits 1-8 and SCT Bits are bits 9-11
-        // so this bitmask is bits 1-11:
-        // 0x0ffe = 0000_1111_1111_1110
-        return (status & 0x0ffe) == 0;
-    }
+    bool succeeded() const;
 
-    inline std::uint8_t status_code() const {
-        return static_cast<std::uint8_t>(SC::extract(status));
-    }
+    std::uint8_t status_code() const;
 
-    inline StatusCodeType status_code_type() const {
-        auto val = SCT::extract(status);
-        return static_cast<StatusCodeType>(val);
-    }
+    StatusCodeType status_code_type() const;
 
-    inline std::uint8_t phase() const {
-        return static_cast<std::uint8_t>(P::extract(status));
-    }
+    std::uint8_t phase() const;
 
-    inline std::uint8_t command_retry_delay() const {
-        return static_cast<std::uint8_t>(CRD::extract(status));
-    }
+    std::uint8_t command_retry_delay() const;
 
-    inline bool do_not_retry() const {
-        return static_cast<bool>(DNR::extract(status));
-    }
+    bool do_not_retry() const;
 
-    inline bool more() const {
-        return static_cast<bool>(M::extract(status));
-    }
+    bool more() const;
 
-    operator int() const noexcept {
-        return status;
-    }
+    operator int() const noexcept;
 
 private:
     using P = utils::BitField<std::uint16_t, 0, 1>;     // phase tag
@@ -149,9 +113,7 @@ struct CompletionQueueEntry {
     std::uint16_t cid;
     CompletionStatus status;  // first bit is the present bit
 
-    inline bool ok() const {
-        return status.succeeded();
-    };
+    bool ok() const;
 };
 
 // check props

@@ -35,12 +35,7 @@ struct NumberOfQueues {
     std::uint16_t nsq{};  // number of submission queues
     std::uint16_t ncq{};  // number of completion queues
 
-    DWRD value() const noexcept {
-        return utils::DwordBuilder<>{}
-            .set<NSQR>(utils::to_zero_based(nsq))
-            .set<NCQR>(utils::to_zero_based(ncq))
-            .get();
-    }
+    DWRD value() const noexcept;
 
     // completion dw0
     struct Completion {
@@ -48,19 +43,7 @@ struct NumberOfQueues {
         std::uint16_t allocated_cq;
     };
 
-    static Completion decode_completion(const CompletionQueueEntry& c) noexcept {
-        using NSQA = utils::BitField<DWRD, 0, 16>;   // # of IOSQ allocated
-        using NCQA = utils::BitField<DWRD, 16, 16>;  // # of IOCQ allocated
-
-        return Completion{
-            .allocated_sq = static_cast<std::uint16_t>(
-                utils::to_ones_based(NSQA::extract(c.completion_result.cdw0))
-            ),
-            .allocated_cq = static_cast<std::uint16_t>(
-                utils::to_ones_based(NCQA::extract(c.completion_result.cdw0))
-            ),
-        };
-    }
+    static Completion decode_completion(const CompletionQueueEntry& c) noexcept;
 
 private:
     using NSQR =
@@ -76,15 +59,11 @@ struct InterruptCoalescing {
     std::uint8_t threshold{};
     std::uint8_t time_100us{};
 
-    DWRD value() const noexcept {
-        return utils::DwordBuilder<>{}.set<THR>(threshold).set<TIME>(time_100us).get();
-    }
+    DWRD value() const noexcept;
 
     struct Completion {};
 
-    static Completion decode_completion(const CompletionQueueEntry&) noexcept {
-        return Completion{};
-    }
+    static Completion decode_completion(const CompletionQueueEntry&) noexcept;
 
 private:
     using THR = utils::BitField<DWRD, 0, 8>;

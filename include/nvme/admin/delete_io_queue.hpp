@@ -19,18 +19,11 @@ namespace nvme::admin::commands {
 struct DeleteIoCq {
     std::uint16_t qid{};
 
-    CommonCommand build(std::uint16_t this_cid) const noexcept {
-        CommonCommand c = CommonCommand::build(Opcode::DeleteIoCq, this_cid);
-        assert(qid != 0 && "Admin CQ can't be deleted.");
-        c.cdw10 = utils::DwordBuilder<>{}.set<QID>(qid).get();
-        return c;
-    }
+    CommonCommand build(std::uint16_t this_cid) const noexcept;
 
     struct Completion {};
 
-    static Completion decode_completion(const CompletionQueueEntry&) {
-        return Completion{};
-    }
+    static Completion decode_completion(const CompletionQueueEntry&);
 
 private:
     // Identifier of the queue (SQ/DQ) to be deleted
@@ -46,18 +39,11 @@ static_assert(CommandDescriptor<DeleteIoCq>);
 struct DeleteIoSq {
     std::uint16_t qid{};
 
-    CommonCommand build(std::uint16_t this_cid) const noexcept {
-        CommonCommand c = CommonCommand::build(Opcode::DeleteIoSq, this_cid);
-        assert(qid != 0 && "Admin CQ can't be deleted.");
-        c.cdw10 = utils::DwordBuilder<>{}.set<QID>(qid).get();
-        return c;
-    }
+    CommonCommand build(std::uint16_t this_cid) const noexcept;
 
     struct Completion {};
 
-    static Completion decode_completion(const CompletionQueueEntry&) {
-        return Completion{};
-    }
+    static Completion decode_completion(const CompletionQueueEntry&);
 
 private:
     // Identifier of the queue (SQ/DQ) to be deleted

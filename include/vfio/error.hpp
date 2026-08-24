@@ -5,10 +5,6 @@
 
 namespace vfio {
 
-inline void check(bool failed, const char* what) {
-    if (failed) {
-        throw std::system_error(errno, std::generic_category(), what);
-    }
-}
+void check(bool failed, const char* what);
 
 }  // namespace vfio

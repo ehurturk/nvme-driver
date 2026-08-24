@@ -1,0 +1,42 @@
+#include "nvme/admin/create_io_queue.hpp"
+
+namespace nvme::admin::commands {
+
+CommonCommand CreateIoCq::build(std::uint16_t this_cid) const noexcept {
+    CommonCommand c = CommonCommand::build(Opcode::CreateIoCq, this_cid);
+
+    c.dptr = DataPointer::prp(prp1);
+    c.cdw10 = utils::DwordBuilder<>{}.set<QID>(qid).set<QSIZE>(utils::to_zero_based(qsize)).get();
+    c.cdw11 = utils::DwordBuilder<>{}
+                  .set<PC>(physically_contiguous)
+                  .set<IEN>(interrupts_enabled)
+                  .set<IV>(interrupt_vector)
+                  .get();
+
+    return c;
+}
+
+CreateIoCq::Completion CreateIoCq::decode_completion(const CompletionQueueEntry& c) {
+    return Completion{.status = c.status.status_code()};
+}
+
+CommonCommand CreateIoSq::build(std::uint16_t this_cid) const noexcept {
+    CommonCommand c = CommonCommand::build(Opcode::CreateIoSq, this_cid);
+
+    c.dptr = DataPointer::prp(prp1);
+    c.cdw10 = utils::DwordBuilder<>{}.set<QID>(qid).set<QSIZE>(utils::to_zero_based(qsize)).get();
+    c.cdw11 = utils::DwordBuilder<>{}
+                  .set<PC>(physically_contiguous)
+                  .set<QPRIO>(utils::to_underlying(priority))
+                  .set<CQID>(cqid)
+                  .get();
+    c.cdw12 = utils::DwordBuilder<>{}.set<NVMSETID>(nvmsetid).get();
+
+    return c;
+}
+
+CreateIoSq::Completion CreateIoSq::decode_completion(const CompletionQueueEntry&) {
+    return Completion{};
+}
+
+}  // namespace nvme::admin::commands

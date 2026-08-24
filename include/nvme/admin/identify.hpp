@@ -47,43 +47,25 @@ class IdentifyControllerData {
 public:
     static constexpr std::size_t SIZE = 4096;
 
-    explicit IdentifyControllerData(const std::byte* src) {
-        std::memcpy(data_.data(), src, SIZE);
-    }
+    explicit IdentifyControllerData(const std::byte* src);
 
-    std::uint16_t vid() const {
-        return read<std::uint16_t>(0);
-    }
+    std::uint16_t vid() const;
 
-    std::string_view serial() const {
-        return str(4, 20);
-    }
+    std::string_view serial() const;
 
-    std::string_view model() const {
-        return str(24, 40);
-    }
+    std::string_view model() const;
 
-    std::uint8_t mdts() const {
-        return read<std::uint8_t>(77);
-    }
+    std::uint8_t mdts() const;
 
-    std::uint16_t cntlid() const {
-        return read<std::uint16_t>(78);
-    }
+    std::uint16_t cntlid() const;
 
     // SQES/CQES: bits [3:0] required minimum, [7:4] maximum, as 2^n,
     // these are what CC.IOSQES/IOCQES must be re-configured from
-    std::uint8_t sqes() const {
-        return read<std::uint8_t>(512);
-    }
+    std::uint8_t sqes() const;
 
-    std::uint8_t cqes() const {
-        return read<std::uint8_t>(513);
-    }
+    std::uint8_t cqes() const;
 
-    std::uint32_t nn() const {
-        return read<std::uint32_t>(516);
-    }  // no. namespaces
+    std::uint32_t nn() const;  // no. namespaces
 
 private:
     template<typename T>
@@ -94,13 +76,7 @@ private:
         return v;
     }
 
-    std::string_view str(std::size_t offset, std::size_t len) const {
-        if (offset > data_.size() || len > data_.size() - offset) {
-            return "";
-        }
-
-        return {reinterpret_cast<const char*>(data_.data() + offset), len};
-    }
+    std::string_view str(std::size_t offset, std::size_t len) const;
 
     alignas(8) std::array<std::byte, SIZE> data_;  // 4 KB buffer
 };

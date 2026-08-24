@@ -16,105 +16,51 @@ public:
         volatile std::uint32_t* cq_head;
     };
 
-    explicit ControllerRegisters(os::MmioRegion bar0)
-        : bar0_{bar0},
-          dstrd_{static_cast<std::uint8_t>(cap::DSTRD::extract(bar0_.read64(bar0::CAP)))} {
-    }
+    explicit ControllerRegisters(os::MmioRegion bar0);
 
-    std::uint64_t cap() const {
-        return bar0_.read64(bar0::CAP);
-    }
+    std::uint64_t cap() const;
 
-    std::uint64_t asq() const {
-        return bar0_.read64(bar0::ASQ);
-    }
+    std::uint64_t asq() const;
 
-    void asq(std::uint64_t iova) {
-        assert((iova & 0xfff) == 0 && "ASQ base must be 4 KiB aligned");
-        bar0_.write64(bar0::ASQ, iova);
-    }
+    void asq(std::uint64_t iova);
 
-    std::uint64_t acq() const {
-        return bar0_.read64(bar0::ACQ);
-    }
+    std::uint64_t acq() const;
 
-    void acq(std::uint64_t iova) {
-        assert((iova & 0xfff) == 0 && "ACQ base must be 4 KiB aligned");
-        bar0_.write64(bar0::ACQ, iova);
-    }
+    void acq(std::uint64_t iova);
 
-    std::uint32_t vs() const {
-        return bar0_.read32(bar0::VS);
-    }
+    std::uint32_t vs() const;
 
-    std::uint32_t intms() const {
-        return bar0_.read32(bar0::INTMS);
-    }
+    std::uint32_t intms() const;
 
-    void intms(std::uint32_t value) {
-        bar0_.write32(bar0::INTMS, value);
-    }
+    void intms(std::uint32_t value);
 
-    std::uint32_t intmc() const {
-        return bar0_.read32(bar0::INTMC);
-    }
+    std::uint32_t intmc() const;
 
-    void intmc(std::uint32_t value) {
-        bar0_.write32(bar0::INTMC, value);
-    }
+    void intmc(std::uint32_t value);
 
-    std::uint32_t cc() const {
-        return bar0_.read32(bar0::CC);
-    }
+    std::uint32_t cc() const;
 
-    void cc(std::uint32_t value) {
-        bar0_.write32(bar0::CC, value);
-    }
+    void cc(std::uint32_t value);
 
-    std::uint32_t csts() const {
-        return bar0_.read32(bar0::CSTS);
-    }
+    std::uint32_t csts() const;
 
-    std::uint32_t nssr() const {
-        return bar0_.read32(bar0::NSSR);
-    }
+    std::uint32_t nssr() const;
 
-    void nssr(std::uint32_t value) {
-        bar0_.write32(bar0::NSSR, value);
-    }
+    void nssr(std::uint32_t value);
 
-    std::uint32_t aqa() const {
-        return bar0_.read32(bar0::AQA);
-    }
+    std::uint32_t aqa() const;
 
-    void aqa(std::uint32_t value) {
-        bar0_.write32(bar0::AQA, value);
-    }
+    void aqa(std::uint32_t value);
 
-    std::uint32_t cmbloc() const {
-        return bar0_.read32(bar0::CMBLOC);
-    }
+    std::uint32_t cmbloc() const;
 
-    std::uint32_t cmbsz() const {
-        return bar0_.read32(bar0::CMBSZ);
-    }
+    std::uint32_t cmbsz() const;
 
-    std::uint8_t dstrd() const {
-        return dstrd_;
-    }
+    std::uint8_t dstrd() const;
 
     // SQyTDBL = DOORBELL_BASE + (2y)     * (4 << DSTRD)
     // CQyHDBL = DOORBELL_BASE + (2y + 1) * (4 << DSTRD)
-    Doorbells doorbells(std::uint16_t queue_id) const {
-        const std::size_t stride = std::size_t{4} << dstrd_;
-        std::byte* base = bar0_.data() + bar0::DOORBELL_BASE;
-
-        auto* sq_tail = reinterpret_cast<volatile std::uint32_t*>(base + (2u * queue_id) * stride);
-        auto* cq_head =
-            reinterpret_cast<volatile std::uint32_t*>(base + (2u * queue_id + 1u) * stride);
-
-        return Doorbells{.sq_tail = sq_tail, .cq_head = cq_head};
-    }
+    Doorbells doorbells(std::uint16_t queue_id) const;
 
 private:
     os::MmioRegion bar0_;

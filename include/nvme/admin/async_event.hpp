@@ -10,9 +10,7 @@
 namespace nvme::admin::commands {
 
 struct AsyncEventRequest {
-    CommonCommand build(std::uint16_t this_cid) const noexcept {
-        return CommonCommand::build(Opcode::AsyncEvent, this_cid);
-    }
+    CommonCommand build(std::uint16_t this_cid) const noexcept;
 
     enum class AsynchronousEventType : std::uint8_t {
         ErrorStatus = 0b000,
@@ -33,16 +31,7 @@ struct AsyncEventRequest {
         DWRD event_specific_param;
     };
 
-    static Completion decode_completion(const CompletionQueueEntry& c) {
-        Completion cl{};
-        DWRD dw0 = c.completion_result.cdw0;
-        cl.type = static_cast<AsynchronousEventType>(AET::extract(dw0));
-        cl.information = static_cast<std::uint8_t>(AEI::extract(dw0));
-        cl.log_page_id = static_cast<std::uint8_t>(LID::extract(dw0));
-        cl.event_specific_param = c.completion_result.cdw1;
-
-        return cl;
-    }
+    static Completion decode_completion(const CompletionQueueEntry& c);
 
 private:
     using AET = utils::BitField<std::uint32_t, 0, 3>;

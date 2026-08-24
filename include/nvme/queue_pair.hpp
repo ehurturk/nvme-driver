@@ -22,12 +22,7 @@ class AdminQueuePair {
 public:
     static constexpr std::uint16_t AQ_ID = 0;
 
-    AdminQueuePair(dma::DmaHeap& heap, ControllerRegisters::Doorbells doorbells)
-        : memory_{heap.alloc(sq_region_bytes() + cq_region_bytes())},
-          sq_{dma::DmaView{memory_}.subview(0, sq_region_bytes()), doorbells.sq_tail},
-          cq_{dma::DmaView{memory_}.subview(sq_region_bytes(), cq_region_bytes()),
-              doorbells.cq_head} {
-    }
+    AdminQueuePair(dma::DmaHeap& heap, ControllerRegisters::Doorbells doorbells);
 
     ~AdminQueuePair() = default;
 
@@ -36,21 +31,13 @@ public:
     AdminQueuePair(AdminQueuePair&&) = delete;
     AdminQueuePair& operator=(AdminQueuePair&&) = delete;
 
-    std::uint64_t sq_iova() const {
-        return memory_.iova();
-    }
+    std::uint64_t sq_iova() const;
 
-    std::uint64_t cq_iova() const {
-        return memory_.iova() + sq_region_bytes();
-    }
+    std::uint64_t cq_iova() const;
 
-    SubmissionQueue<AdminQueueKind>& sq() {
-        return sq_;
-    }
+    SubmissionQueue<AdminQueueKind>& sq();
 
-    CompletionQueue<AdminQueueKind>& cq() {
-        return cq_;
-    }
+    CompletionQueue<AdminQueueKind>& cq();
 
 private:
     static constexpr std::size_t sq_bytes() {
