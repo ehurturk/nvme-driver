@@ -49,20 +49,23 @@ void Controller::configure() {
     const std::uint64_t cap = regs_.cap();
 
     // Set CC.AMS
+    // CAP.AMS bit 0 = WRR
+    //         bit 1 = vendor specific
+    // so if CAP.AMS == 0 -> only round robin
     std::uint8_t ccAms{0};
 
     const auto capAms = cap::AMS::extract(cap);
 
     if (capAms == 0) {
-        std::println("AMS: Vendor specific.");
-        ccAms = 0b0;  // TODO: 0b111 or 0b0?
+        std::println("AMS: Round Robin is supported");
     } else if (capAms == 1) {
-        std::println("AMS: WRRUPC");
-        ccAms = 0b1;
+        std::println("AMS: Weighted Round Robin is supported");
     } else {
         std::println("Unsupported AMS. Defaulting to round robin.");
-        ccAms = 0b0;
     }
+
+    // TODO: im setting this to round robin for now but could change this in future ofc
+    ccAms = 0;
 
     // Set CC.MPS
     std::uint8_t ccMps{0};
