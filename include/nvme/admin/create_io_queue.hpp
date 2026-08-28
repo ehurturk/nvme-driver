@@ -1,10 +1,12 @@
 #pragma once
 
+#include "dma/buffer.hpp"
 #include "nvme/admin/opcodes.hpp"
 #include "nvme/command.hpp"
 #include "nvme/queue_entry.hpp"
 #include "utils.hpp"
 
+#include <cassert>
 #include <cstdint>
 
 namespace nvme::admin::commands {
@@ -30,12 +32,22 @@ enum class QueuePriority : std::uint8_t {
 //              2 - 15: Reserved
 //              16 - 31: Interrupt Vector (IV): Transport specific (if PCIe it is MSI-X i think?)
 struct CreateIoCq {
-    std::uint64_t prp1{};
-    std::uint16_t qid{};
-    std::uint16_t qsize{};
-    std::uint16_t interrupt_vector = 0;
-    bool interrupts_enabled = false;
-    bool physically_contiguous = true;
+    CreateIoCq(
+        dma::DmaView queue_buf,
+        QueueId qid,
+        std::uint16_t qsize,
+        bool interrupts_enabled = false,
+        std::uint16_t interrupt_vector = 0,
+        bool physically_contiguous = true
+    )
+        : prp1{queue_buf.iova},
+          qid{qid.value},
+          qsize{qsize},
+          interrupt_vector{interrupt_vector},
+          interrupts_enabled{interrupts_enabled},
+          physically_contiguous{physically_contiguous} {
+        assert(queue_buf.size >= std::size_t{qsize} * sizeof(wire::CompletionEntry));
+    }
 
     wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
 
@@ -52,6 +64,13 @@ private:
     using PC = utils::BitField<DWRD, 0, 1>;
     using IEN = utils::BitField<DWRD, 1, 1>;
     using IV = utils::BitField<DWRD, 16, 16>;
+
+    std::uint64_t prp1;
+    std::uint16_t qid;
+    std::uint16_t qsize;
+    std::uint16_t interrupt_vector;
+    bool interrupts_enabled;
+    bool physically_contiguous;
 };
 
 static_assert(CommandDescriptor<CreateIoCq>);
@@ -82,13 +101,24 @@ static_assert(CommandDescriptor<CreateIoCq>);
 //                       to be associated with this SQ.
 //                       If this is 0x0 then this SQ is not associated with any NVM Set
 struct CreateIoSq {
-    std::uint64_t prp1{};
-    std::uint16_t qid{};
-    std::uint16_t qsize{};
-    std::uint16_t cqid{};
-    QueuePriority priority = QueuePriority::Urgent;
-    bool physically_contiguous = true;
-    std::uint16_t nvmsetid = 0;
+    CreateIoSq(
+        dma::DmaView queue_buf,
+        QueueId qid,
+        CompletionQueueId cqid,
+        std::uint16_t qsize,
+        QueuePriority priority = QueuePriority::Urgent,
+        bool physically_contiguous = true,
+        std::uint16_t nvmsetid = 0
+    )
+        : prp1{queue_buf.iova},
+          qid{qid.value},
+          qsize{qsize},
+          cqid{cqid.value},
+          priority{priority},
+          physically_contiguous{physically_contiguous},
+          nvmsetid{nvmsetid} {
+        assert(queue_buf.size >= std::size_t{qsize} * sizeof(wire::SubmissionEntry));
+    }
 
     wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
 
@@ -104,6 +134,14 @@ private:
     using QPRIO = utils::BitField<DWRD, 1, 2>;
     using CQID = utils::BitField<DWRD, 16, 16>;
     using NVMSETID = utils::BitField<DWRD, 0, 16>;
+
+    std::uint64_t prp1;
+    std::uint16_t qid;
+    std::uint16_t qsize;
+    std::uint16_t cqid;
+    QueuePriority priority;
+    bool physically_contiguous;
+    std::uint16_t nvmsetid;
 };
 
 static_assert(CommandDescriptor<CreateIoSq>);

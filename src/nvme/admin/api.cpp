@@ -8,77 +8,96 @@
 #include <cstdint>
 #include <expected>
 #include <format>
-#include <utility>
+#include <string_view>
 
 namespace nvme::admin {
 
+namespace {
+
+Error completion_error(std::string_view what, const wire::CompletionEntry& completion) {
+    return Error{
+        .reason = std::format("{} completed with error status: {}", what, completion.status),
+        .severity = Error::Severity::ERROR
+    };
+}
+
+}  // namespace
+
 Result<IdentifyControllerData> identify_controller(Controller& controller, dma::DmaHeap& heap) {
-    dma::DmaBuffer result_buffer = heap.alloc(IdentifyControllerData::SIZE);
+    dma::DmaBuffer buf = heap.alloc(IdentifyControllerData::SIZE);
+    const commands::IdentifyControllerType cmd{dma::DmaView{buf}};
 
-    auto identify = controller.execute_admin_command(
-        commands::IdentifyControllerType{.prp1 = result_buffer.iova()}
-    );
-    if (!identify) {
-        return std::unexpected{identify.error()};
+    auto done = controller.execute_admin_command(cmd);
+    if (!done) {
+        return std::unexpected{done.error()};
     }
-    if (!identify->ok()) {
-        return std::unexpected{Error{
-            .reason = std::format(
-                "Identify Controller completed with error status: {}",
-                identify->status
-            ),
-            .severity = Error::Severity::ERROR
-        }};
+    if (!done->ok()) {
+        return std::unexpected{completion_error("Identify Controller", *done)};
     }
 
-    return IdentifyControllerData{result_buffer.uva()};
+    return cmd.data();
 }
 
 Result<IdentifyNamespaceData>
 identify_namespace(Controller& controller, dma::DmaHeap& heap, std::uint32_t nsid) {
-    dma::DmaBuffer result_buffer = heap.alloc(IdentifyNamespaceData::SIZE);
+    dma::DmaBuffer buf = heap.alloc(IdentifyNamespaceData::SIZE);
+    const commands::IdentifyNamespaceType cmd{dma::DmaView{buf}, nsid};
 
-    auto identify = controller.execute_admin_command(
-        commands::IdentifyNamespaceType{.prp1 = result_buffer.iova(), .nsid = nsid}
-    );
-    if (!identify) {
-        return std::unexpected{identify.error()};
+    auto done = controller.execute_admin_command(cmd);
+    if (!done) {
+        return std::unexpected{done.error()};
     }
-    if (!identify->ok()) {
-        return std::unexpected{Error{
-            .reason = std::format(
-                "Identify Namespace {} completed with error status: {}",
-                nsid,
-                identify->status
-            ),
-            .severity = Error::Severity::ERROR
-        }};
+    if (!done->ok()) {
+        return std::unexpected{
+            completion_error(std::format("Identify Namespace {}", nsid), *done)
+        };
     }
 
-    return IdentifyNamespaceData{result_buffer.uva()};
+    return cmd.data();
+}
+
+Result<std::vector<std::uint32_t>>
+list_active_namespaces(Controller& controller, dma::DmaHeap& heap) {
+    std::vector<std::uint32_t> nsids;
+    dma::DmaBuffer buf = heap.alloc(IdentifyActiveNamespaceIdListData::SIZE);
+
+    std::uint32_t cursor = 0;
+    while (true) {
+        const commands::IdentifyActiveNamespaceIdListType cmd{dma::DmaView{buf}, cursor};
+
+        auto done = controller.execute_admin_command(cmd);
+        if (!done) {
+            return std::unexpected{done.error()};
+        }
+        if (!done->ok()) {
+            return std::unexpected{completion_error("Identify Active Namespace ID List", *done)};
+        }
+
+        const auto page = cmd.data();
+        const auto ids = page.nsids();
+        nsids.insert(nsids.end(), ids.begin(), ids.end());
+
+        // NSID values >= FFFFFFFEh are not valid cursors for this CNS
+        if (!page.full() || nsids.back() >= 0xFFFFFFFE) {
+            break;
+        }
+        cursor = nsids.back();
+    }
+
+    return nsids;
 }
 
 Result<SmartLogData> read_smart_log(Controller& controller, dma::DmaHeap& heap) {
     dma::DmaBuffer buf = heap.alloc(SmartLogData::SIZE);
 
     auto log = controller.execute_admin_command(
-        commands::GetLogPage{
-            .prp1 = buf.iova(),
-            .lid = LogPageId::SmartHealth,
-            .num_dwords = SmartLogData::SIZE / 4,
-        }
+        commands::GetLogPage{dma::DmaView{buf}, LogPageId::SmartHealth, SmartLogData::SIZE / 4}
     );
-    
     if (!log) {
         return std::unexpected{log.error()};
     }
-
     if (!log->ok()) {
-        return std::unexpected{Error{
-            .reason =
-                std::format("Get Log Page (SMART) completed with error status: {}", log->status),
-            .severity = Error::Severity::ERROR
-        }};
+        return std::unexpected{completion_error("Get Log Page (SMART)", *log)};
     }
 
     return SmartLogData{buf.uva()};
@@ -101,22 +120,16 @@ read_error_log(Controller& controller, dma::DmaHeap& heap, std::uint32_t max_ent
 
     auto log = controller.execute_admin_command(
         commands::GetLogPage{
-            .prp1 = buf.iova(),
-            .lid = LogPageId::Error,
-            .num_dwords = static_cast<std::uint32_t>(max_entries * (ErrorLogEntry::SIZE / 4)),
+            dma::DmaView{buf},
+            LogPageId::Error,
+            static_cast<std::uint32_t>(max_entries * (ErrorLogEntry::SIZE / 4))
         }
     );
     if (!log) {
         return std::unexpected{log.error()};
     }
     if (!log->ok()) {
-        return std::unexpected{Error{
-            .reason = std::format(
-                "Get Log Page (Error Information) completed with error status: {}",
-                log->status
-            ),
-            .severity = Error::Severity::ERROR
-        }};
+        return std::unexpected{completion_error("Get Log Page (Error Information)", *log)};
     }
 
     std::vector<ErrorLogEntry> entries;
@@ -135,7 +148,7 @@ set_number_of_queues(Controller& controller, std::uint16_t nsq, std::uint16_t nc
     using SetNumberOfQueues = commands::SetFeatures<features::NumberOfQueues>;
 
     auto submitted =
-        controller.submit_admin_command(SetNumberOfQueues{.feature = {.nsq = nsq, .ncq = ncq}});
+        controller.submit_admin_command(SetNumberOfQueues{features::NumberOfQueues{nsq, ncq}});
     if (!submitted) {
         return std::unexpected{submitted.error()};
     }
@@ -144,7 +157,7 @@ set_number_of_queues(Controller& controller, std::uint16_t nsq, std::uint16_t nc
 }
 
 Result<dma::DmaBuffer>
-create_io_cq(Controller& controller, dma::DmaHeap& heap, std::uint16_t qid, std::uint16_t qsize) {
+create_io_cq(Controller& controller, dma::DmaHeap& heap, QueueId qid, std::uint16_t qsize) {
     if (qsize > controller.max_io_queue_entries()) {
         return std::unexpected{Error{
             .reason = std::format(
@@ -159,27 +172,15 @@ create_io_cq(Controller& controller, dma::DmaHeap& heap, std::uint16_t qid, std:
     dma::DmaBuffer buf = heap.alloc(qsize * sizeof(wire::CompletionEntry));
 
     auto created = controller.execute_admin_command(
-        commands::CreateIoCq{
-            .prp1 = buf.iova(),
-            .qid = qid,
-            .qsize = qsize,
-            .interrupt_vector = 0,
-            .interrupts_enabled = false,
-            .physically_contiguous = true,
-        }
+        commands::CreateIoCq{dma::DmaView{buf}, qid, qsize}
     );
     if (!created) {
         return std::unexpected{created.error()};
     }
     if (!created->ok()) {
-        return std::unexpected{Error{
-            .reason = std::format(
-                "Create IO CQ {} completed with error status: {}",
-                qid,
-                created->status
-            ),
-            .severity = Error::Severity::ERROR
-        }};
+        return std::unexpected{
+            completion_error(std::format("Create IO CQ {}", qid.value), *created)
+        };
     }
 
     return buf;
@@ -188,8 +189,8 @@ create_io_cq(Controller& controller, dma::DmaHeap& heap, std::uint16_t qid, std:
 Result<dma::DmaBuffer> create_io_sq(
     Controller& controller,
     dma::DmaHeap& heap,
-    std::uint16_t qid,
-    std::uint16_t cqid,
+    QueueId qid,
+    CompletionQueueId cqid,
     std::uint16_t qsize
 ) {
     if (qsize > controller.max_io_queue_entries()) {
@@ -206,26 +207,15 @@ Result<dma::DmaBuffer> create_io_sq(
     dma::DmaBuffer buf = heap.alloc(qsize * sizeof(wire::SubmissionEntry));
 
     auto created = controller.execute_admin_command(
-        commands::CreateIoSq{
-            .prp1 = buf.iova(),
-            .qid = qid,
-            .qsize = qsize,
-            .cqid = cqid,
-            .physically_contiguous = true,
-        }
+        commands::CreateIoSq{dma::DmaView{buf}, qid, cqid, qsize}
     );
     if (!created) {
         return std::unexpected{created.error()};
     }
     if (!created->ok()) {
-        return std::unexpected{Error{
-            .reason = std::format(
-                "Create IO SQ {} completed with error status: {}",
-                qid,
-                created->status
-            ),
-            .severity = Error::Severity::ERROR
-        }};
+        return std::unexpected{
+            completion_error(std::format("Create IO SQ {}", qid.value), *created)
+        };
     }
 
     return buf;

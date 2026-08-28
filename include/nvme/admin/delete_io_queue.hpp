@@ -17,7 +17,8 @@ namespace nvme::admin::commands {
 //       - Host shall ensure that any associated I/O Submission Queue is deleted
 //         deleted prior to deleting a CQ.
 struct DeleteIoCq {
-    std::uint16_t qid{};
+    explicit DeleteIoCq(QueueId qid) : qid{qid.value} {
+    }
 
     wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
 
@@ -28,6 +29,8 @@ struct DeleteIoCq {
 private:
     // Identifier of the queue (SQ/DQ) to be deleted
     using QID = utils::BitField<DWRD, 0, 16>;
+
+    std::uint16_t qid;
 };
 
 static_assert(CommandDescriptor<DeleteIoCq>);
@@ -37,7 +40,8 @@ static_assert(CommandDescriptor<DeleteIoCq>);
 // NOTE: - After this command has been completed, the PRP List that describes
 //         the SQ may be deallocated by the host.
 struct DeleteIoSq {
-    std::uint16_t qid{};
+    explicit DeleteIoSq(QueueId qid) : qid{qid.value} {
+    }
 
     wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
 
@@ -48,6 +52,8 @@ struct DeleteIoSq {
 private:
     // Identifier of the queue (SQ/DQ) to be deleted
     using QID = utils::BitField<DWRD, 0, 16>;
+
+    std::uint16_t qid;
 };
 
 static_assert(CommandDescriptor<DeleteIoSq>);

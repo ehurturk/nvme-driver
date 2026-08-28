@@ -1,5 +1,7 @@
 #include "nvme/admin/identify.hpp"
 
+#include <algorithm>
+
 namespace nvme::admin {
 
 namespace {
@@ -31,6 +33,8 @@ using LBAF_MS = utils::BitField<std::uint32_t, 0, 16>;
 using LBAF_LBADS = utils::BitField<std::uint32_t, 16, 8>;
 using LBAF_RP = utils::BitField<std::uint32_t, 24, 2>;
 }  // namespace
+
+// Identify Controller:
 
 IdentifyControllerData::IdentifyControllerData(const std::byte* src) {
     std::memcpy(data_.data(), src, SIZE);
@@ -76,6 +80,8 @@ std::string_view IdentifyControllerData::str(std::size_t offset, std::size_t len
     return {reinterpret_cast<const char*>(data_.data() + offset), len};
 }
 
+// IdentifyNamespace:
+
 IdentifyNamespaceData::IdentifyNamespaceData(const std::byte* src) {
     std::memcpy(data_.data(), src, SIZE);
 }
@@ -120,6 +126,23 @@ IdentifyNamespaceData::LbaFormat IdentifyNamespaceData::active_lba_format() cons
 
 std::uint32_t IdentifyNamespaceData::lba_size_bytes() const {
     return std::uint32_t{1} << active_lba_format().lba_data_shift;
+}
+
+// IdentifyActiveNamespaceIdList:
+
+IdentifyActiveNamespaceIdListData::IdentifyActiveNamespaceIdListData(const std::byte* src) {
+    std::memcpy(nsid_list_.data(), src, SIZE);
+
+    const auto first_zero = std::ranges::find(nsid_list_, 0U);
+    count_ = static_cast<std::size_t>(std::distance(nsid_list_.begin(), first_zero));
+}
+
+std::span<const std::uint32_t> IdentifyActiveNamespaceIdListData::nsids() const {
+    return {nsid_list_.data(), count_};
+}
+
+bool IdentifyActiveNamespaceIdListData::full() const {
+    return count_ == MAX_COUNT;
 }
 
 }  // namespace nvme::admin

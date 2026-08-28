@@ -17,6 +17,9 @@ Result<IdentifyControllerData> identify_controller(Controller& controller, dma::
 Result<IdentifyNamespaceData>
 identify_namespace(Controller& controller, dma::DmaHeap& heap, std::uint32_t nsid);
 
+Result<std::vector<std::uint32_t>>
+list_active_namespaces(Controller& controller, dma::DmaHeap& heap);
+
 Result<SmartLogData> read_smart_log(Controller& controller, dma::DmaHeap& heap);
 
 Result<std::vector<ErrorLogEntry>>
@@ -26,13 +29,13 @@ Result<features::NumberOfQueues::Completion>
 set_number_of_queues(Controller& controller, std::uint16_t nsq, std::uint16_t ncq);
 
 Result<dma::DmaBuffer>
-create_io_cq(Controller& controller, dma::DmaHeap& heap, std::uint16_t qid, std::uint16_t qsize);
+create_io_cq(Controller& controller, dma::DmaHeap& heap, QueueId qid, std::uint16_t qsize);
 
 Result<dma::DmaBuffer> create_io_sq(
     Controller& controller,
     dma::DmaHeap& heap,
-    std::uint16_t qid,
-    std::uint16_t cqid,
+    QueueId qid,
+    CompletionQueueId cqid,
     std::uint16_t qsize
 );
 

@@ -34,17 +34,23 @@ Controller::~Controller() {
     disable();
 }
 
-void Controller::enable() {
-    change_controller_state_to(CtlEn);
+bool Controller::enable() {
+    return change_controller_state_to(CtlEn);
 }
 
-void Controller::disable() {
-    change_controller_state_to(CtlDis);
+bool Controller::disable() {
+    return change_controller_state_to(CtlDis);
 }
 
-void Controller::configure() {
+Result<void> Controller::configure() {
     fetch_timeout();
-    disable();
+
+    if (!disable()) {
+        return std::unexpected{Error{
+            .reason = "Controller did not become disabled within CAP.TO",
+            .severity = Error::Severity::ERROR
+        }};
+    }
 
     const std::uint64_t cap = regs_.cap();
 
@@ -92,18 +98,20 @@ void Controller::configure() {
 
     const auto capCss = cap::CSS::extract(cap);
 
-    if ((capCss & cap::css::NOIOCSS_BIT) != 0u) {
-        std::println("No IO command set is supported. Setting CC.CSS to NOIOCSS (0b111)");
-        ccCss = cc::css::NOIOCSS;
-    } else if ((capCss & cap::css::IOCSS_BIT) != 0u) {
-        std::println("IO Command Set is supported. Setting CC.CSS to IOCSS (0b110)");
-        ccCss = cc::css::IOCSS;
-    } else if ((capCss & cap::css::NCSS_BIT) != 0u) {
+    if ((capCss & cap::css::NCSS_BIT) != 0u) {
         std::println("NVM Command Set is supported. Setting CC.CSS to NCSS (0b000)");
         ccCss = cc::css::NCSS;
+    } else if ((capCss & cap::css::IOCSS_BIT) != 0u) {
+        std::println("IO Command Sets are supported. Setting CC.CSS to IOCSS (0b110)");
+        ccCss = cc::css::IOCSS;
+    } else if ((capCss & cap::css::NOIOCSS_BIT) != 0u) {
+        std::println("No IO command set is supported. Setting CC.CSS to NOIOCSS (0b111)");
+        ccCss = cc::css::NOIOCSS;
     } else {
-        std::println("NVME Command Set is not found.");
-        return;
+        return std::unexpected{Error{
+            .reason = std::format("Controller supports no usable command set (CAP.CSS = {:#x})", capCss),
+            .severity = Error::Severity::ERROR
+        }};
     }
 
     // AQA, NOTE: NVMe controller expects 0s-based depth!!!!
@@ -136,7 +144,14 @@ void Controller::configure() {
     cc_builder.set<cc::IOCQES>(static_cast<std::uint32_t>(constants::IO_CQES));
     regs_.cc(cc_builder.get());
 
-    enable();
+    if (!enable()) {
+        return std::unexpected{Error{
+            .reason = "Controller did not become ready within CAP.TO after setting CC.EN",
+            .severity = Error::Severity::ERROR
+        }};
+    }
+
+    return {};
 }
 
 AdminQueuePair& Controller::admin_queues() {
@@ -275,9 +290,23 @@ void Controller::fetch_timeout() {
     timeout_ = timeout_raw * 500ms;
 }
 
-void Controller::change_controller_state_to(std::uint8_t en) {
-    const auto cc = cc::EN::insert(regs_.cc(), en);
-    regs_.cc(cc);
+bool Controller::change_controller_state_to(std::uint8_t en) {
+    const std::uint32_t cc = regs_.cc();
+    const auto current_en = static_cast<std::uint8_t>(cc::EN::extract(cc));
+
+    if (!wait_for(
+            [&] {
+                return rdy_is(current_en);
+            },
+            timeout_
+        )) {
+        std::println("[TIMEOUT]: CSTS.RDY did not settle to {} before toggling CC.EN.", current_en);
+        return false;
+    }
+
+    if (current_en != en) {
+        regs_.cc(cc::EN::insert(cc, en));
+    }
 
     if (!wait_for(
             [&] {
@@ -285,19 +314,20 @@ void Controller::change_controller_state_to(std::uint8_t en) {
             },
             timeout_
         )) {
-        if (en == 0b0) {
+        if (en == CtlDis) {
             std::println("[TIMEOUT]: Controller did not become disabled.");
         } else {
             std::println("[TIMEOUT]: Controller did not become enabled.");
         }
-        return;
+        return false;
     }
 
-    if (en == 0b0) {
+    if (en == CtlDis) {
         std::println("[INFO] Controller is disabled.");
     } else {
         std::println("[INFO] Controller is enabled.");
     }
+    return true;
 }
 
 }  // namespace nvme

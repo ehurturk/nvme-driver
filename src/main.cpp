@@ -42,21 +42,31 @@ void execute_identify_controller_command(nvme::Controller& controller, dma::DmaH
     std::println("\tNumber of Namespaces: {}", identify_result->nn());
 }
 
-void execute_identify_namespace_commmand(nvme::Controller& controller, dma::DmaHeap& dma_heap) {
-    nvme::Result<nvme::admin::IdentifyNamespaceData> ns =
-        nvme::admin::identify_namespace(controller, dma_heap, 1);
-
-    if (!ns) {
-        std::println("[ERROR]: {}", ns.error().reason);
+void execute_identify_namespace_commands(nvme::Controller& controller, dma::DmaHeap& dma_heap) {
+    auto nsids = nvme::admin::list_active_namespaces(controller, dma_heap);
+    if (!nsids) {
+        std::println("[ERROR]: {}", nsids.error().reason);
         return;
     }
 
-    std::println("Namespace 1:");
-    std::println("\tSize (NSZE): {} LBAs", ns->nsze());
-    std::println("\tCapacity (NCAP): {} LBAs", ns->ncap());
-    std::println("\tIn use (NUSE): {} LBAs", ns->nuse());
-    std::println("\tLBA size: {} bytes", ns->lba_size_bytes());
-    std::println("\tMetadata size: {} bytes", ns->active_lba_format().metadata_size);
+    std::println("Active namespaces: {}", nsids->size());
+
+    for (const std::uint32_t nsid : *nsids) {
+        nvme::Result<nvme::admin::IdentifyNamespaceData> ns =
+            nvme::admin::identify_namespace(controller, dma_heap, nsid);
+
+        if (!ns) {
+            std::println("[ERROR]: {}", ns.error().reason);
+            continue;
+        }
+
+        std::println("Namespace {}:", nsid);
+        std::println("\tSize (NSZE): {} LBAs", ns->nsze());
+        std::println("\tCapacity (NCAP): {} LBAs", ns->ncap());
+        std::println("\tIn use (NUSE): {} LBAs", ns->nuse());
+        std::println("\tLBA size: {} bytes", ns->lba_size_bytes());
+        std::println("\tMetadata size: {} bytes", ns->active_lba_format().metadata_size);
+    }
 }
 
 void execute_read_logs_command(nvme::Controller& controller, dma::DmaHeap& dma_heap) {
@@ -105,14 +115,21 @@ int main() {
 
         nvme::Controller controller{{.bar0 = os::MmioRegion{bar0.data()}, .dma = dma_heap}};
 
-        controller.configure();
+        if (auto configured = controller.configure(); !configured) {
+            std::println("[ERROR]: {}", configured.error().reason);
+            return EXIT_FAILURE;
+        }
 
         execute_identify_controller_command(controller, dma_heap);
-        execute_identify_namespace_commmand(controller, dma_heap);
+        execute_identify_namespace_commands(controller, dma_heap);
         execute_read_logs_command(controller, dma_heap);
 
         {
-            auto allocated = na::set_number_of_queues(controller, nvme::constants::NR_IO_SQ, nvme::constants::NR_IO_CQ);
+            auto allocated = na::set_number_of_queues(
+                controller,
+                nvme::constants::NR_IO_SQ,
+                nvme::constants::NR_IO_CQ
+            );
 
             if (!allocated) {
                 std::println("[ERROR]: {}", allocated.error().reason);
@@ -124,7 +141,8 @@ int main() {
         }
 
         // Create a Create IO Completion Queue Command
-        nvme::Result<dma::DmaBuffer> iocq_buf = na::create_io_cq(controller, dma_heap, IO_QPAIR_ID, nvme::constants::IO_DEPTH);
+        nvme::Result<dma::DmaBuffer> iocq_buf =
+            na::create_io_cq(controller, dma_heap, nvme::QueueId{IO_QPAIR_ID}, nvme::constants::IO_DEPTH);
         if (!iocq_buf) {
             std::println("[ERROR]: {}", iocq_buf.error().reason);
             return EXIT_FAILURE;
@@ -136,8 +154,8 @@ int main() {
         nvme::Result<dma::DmaBuffer> iosq_buf = na::create_io_sq(
             controller,
             dma_heap,
-            IO_QPAIR_ID,
-            IO_QPAIR_ID,
+            nvme::QueueId{IO_QPAIR_ID},
+            nvme::CompletionQueueId{IO_QPAIR_ID},
             nvme::constants::IO_DEPTH
         );
 
@@ -145,7 +163,7 @@ int main() {
             std::println("[ERROR]: {}", iosq_buf.error().reason);
             return EXIT_FAILURE;
         }
-        
+
         std::println("Created IO SQ (qid {}, cqid {})", IO_QPAIR_ID, IO_QPAIR_ID);
         std::println("=========");
 

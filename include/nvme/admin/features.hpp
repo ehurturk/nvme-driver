@@ -31,9 +31,9 @@ concept Feature = requires(const F f, const wire::CompletionEntry& e) {
 struct NumberOfQueues {
     static constexpr FeatureId id = FeatureId::NumberOfQueues;
 
-    // Write these as 1s based, it is converted to 0s based on encoding.
-    std::uint16_t nsq{};  // number of submission queues
-    std::uint16_t ncq{};  // number of completion queues
+    // NOTE: 1s based
+    NumberOfQueues(std::uint16_t nsq, std::uint16_t ncq) : nsq{nsq}, ncq{ncq} {
+    }
 
     DWRD value() const noexcept;
 
@@ -50,14 +50,18 @@ private:
         utils::BitField<DWRD, 0, 16>;  // 0 based, # of IOSQ requested (not including admin q)
     using NCQR =
         utils::BitField<DWRD, 16, 16>;  // 0 based, # of IOCQ requested (not including admin q)
+
+    std::uint16_t nsq;
+    std::uint16_t ncq;
 };
 
 // Interrupt Coalescing: Feature Id: 0x08
 struct InterruptCoalescing {
     static constexpr FeatureId id = FeatureId::InterruptCoalescing;
 
-    std::uint8_t threshold{};
-    std::uint8_t time_100us{};
+    InterruptCoalescing(std::uint8_t threshold, std::uint8_t time_100us)
+        : threshold{threshold}, time_100us{time_100us} {
+    }
 
     DWRD value() const noexcept;
 
@@ -68,6 +72,9 @@ struct InterruptCoalescing {
 private:
     using THR = utils::BitField<DWRD, 0, 8>;
     using TIME = utils::BitField<DWRD, 8, 8>;
+
+    std::uint8_t threshold;
+    std::uint8_t time_100us;
 };
 
 static_assert(Feature<NumberOfQueues>);

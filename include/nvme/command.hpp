@@ -15,13 +15,21 @@ namespace nvme {
 
 class Controller;
 
+
+struct QueueId {
+    std::uint16_t value;
+};
+
+struct CompletionQueueId {
+    std::uint16_t value;
+};
+
 template<typename C>
-concept CommandDescriptor = std::default_initializable<C> &&
-                            requires(const C c, std::uint16_t cid, const wire::CompletionEntry& e) {
-                                { c.build(cid) } noexcept -> std::same_as<wire::SubmissionEntry>;
-                                typename C::Completion;
-                                { C::decode_completion(e) } -> std::same_as<typename C::Completion>;
-                            };
+concept CommandDescriptor = requires(const C c, std::uint16_t cid, const wire::CompletionEntry& e) {
+    { c.build(cid) } noexcept -> std::same_as<wire::SubmissionEntry>;
+    typename C::Completion;
+    { C::decode_completion(e) } -> std::same_as<typename C::Completion>;
+};
 
 struct InFlightCommand {
     Cid cid;

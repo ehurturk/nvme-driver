@@ -33,10 +33,9 @@ namespace nvme::admin::commands {
 // CDW14: bits 0 - 6: UUID index
 template<features::Feature F>
 struct SetFeatures {
-    F feature;
-    bool save = false;
-    std::uint64_t prp1 = 0;
-    std::uint8_t uuid_index = 0;
+    explicit SetFeatures(F feature, bool save = false, std::uint8_t uuid_index = 0)
+        : feature{std::move(feature)}, save{save}, uuid_index{uuid_index} {
+    }
 
     wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept {
         wire::SubmissionEntry c = wire::SubmissionEntry::build(Opcode::SetFeatures, this_cid);
@@ -62,13 +61,21 @@ private:
     using FID = utils::BitField<DWRD, 0, 8>;
     using SV = utils::BitField<DWRD, 31, 1>;
     using UIDX = utils::BitField<DWRD, 0, 7>;
+
+    F feature;
+    bool save;
+    std::uint64_t prp1 = 0;  // no supported feature carries a data buffer yet
+    std::uint8_t uuid_index;
 };
 
 template<features::Feature F>
 struct GetFeatures {
-    features::Select sel = features::Select::Current;
-    std::uint64_t prp1 = 0;
-    std::uint8_t uuid_index = 0;
+    explicit GetFeatures(
+        features::Select sel = features::Select::Current,
+        std::uint8_t uuid_index = 0
+    )
+        : sel{sel}, uuid_index{uuid_index} {
+    }
 
     wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept {
         wire::SubmissionEntry c = wire::SubmissionEntry::build(Opcode::GetFeatures, this_cid);
@@ -93,6 +100,10 @@ private:
     using FID = utils::BitField<DWRD, 0, 8>;
     using SEL = utils::BitField<DWRD, 8, 3>;
     using UIDX = utils::BitField<DWRD, 0, 7>;
+
+    features::Select sel;
+    std::uint64_t prp1 = 0;
+    std::uint8_t uuid_index;
 };
 
 static_assert(CommandDescriptor<SetFeatures<features::NumberOfQueues>>);

@@ -12,8 +12,8 @@ namespace nvme::admin::commands {
 // abort (0x08)
 // completion dw0 bit 0: 1 = not aborted, 0 = abort was not applied
 struct Abort {
-    std::uint16_t sqid{};
-    std::uint16_t cid{};
+    Abort(QueueId sqid, std::uint16_t cid) : sqid{sqid.value}, cid{cid} {
+    }
 
     wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
 
@@ -26,6 +26,9 @@ struct Abort {
 private:
     using SQID = utils::BitField<DWRD, 0, 16>;
     using CID = utils::BitField<DWRD, 16, 16>;
+
+    std::uint16_t sqid;
+    std::uint16_t cid;
 };
 
 static_assert(CommandDescriptor<Abort>);

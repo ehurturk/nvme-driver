@@ -1,11 +1,13 @@
 #pragma once
 
+#include "dma/buffer.hpp"
 #include "nvme/admin/opcodes.hpp"
 #include "nvme/command.hpp"
 #include "nvme/queue_entry.hpp"
 #include "utils.hpp"
 
 #include <array>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -96,12 +98,22 @@ private:
 namespace commands {
 
 struct GetLogPage {
-    std::uint64_t prp1{};
-    LogPageId lid{};
-    std::uint32_t num_dwords{};
-    std::uint32_t nsid = 0xFFFFFFFF;
-    bool retain_async_event = false;
-    std::uint64_t offset = 0;
+    GetLogPage(
+        dma::DmaView result,
+        LogPageId lid,
+        std::uint32_t num_dwords,
+        std::uint32_t nsid = 0xFFFFFFFF,
+        bool retain_async_event = false,
+        std::uint64_t offset = 0
+    )
+        : prp1{result.iova},
+          lid{lid},
+          num_dwords{num_dwords},
+          nsid{nsid},
+          retain_async_event{retain_async_event},
+          offset{offset} {
+        assert(result.size >= std::size_t{num_dwords} * 4);
+    }
 
     wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
 
@@ -114,6 +126,13 @@ private:
     using RAE = utils::BitField<DWRD, 15, 1>;
     using NUMDL = utils::BitField<DWRD, 16, 16>;
     using NUMDU = utils::BitField<DWRD, 0, 16>;
+
+    std::uint64_t prp1;
+    LogPageId lid;
+    std::uint32_t num_dwords;
+    std::uint32_t nsid;
+    bool retain_async_event;
+    std::uint64_t offset;
 };
 
 static_assert(CommandDescriptor<GetLogPage>);

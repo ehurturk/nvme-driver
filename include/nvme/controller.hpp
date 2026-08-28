@@ -47,11 +47,11 @@ public:
     Controller(Controller&&) = delete;
     Controller& operator=(Controller&&) = delete;
 
-    void enable();
+    bool enable();
 
-    void disable();
+    bool disable();
 
-    void configure();
+    [[nodiscard]] Result<void> configure();
 
     // submits an admin command and blocks until its own completion arrives
     template<CommandDescriptor Command>
@@ -135,7 +135,7 @@ private:
 
     // en = 0b0 -> disable
     // en = 0b1 -> enable
-    void change_controller_state_to(std::uint8_t en);
+    bool change_controller_state_to(std::uint8_t en);
 
 private:
     ControllerRegisters regs_;
