@@ -89,8 +89,14 @@ void Controller::configure() {
 
     const auto capCss = cap::CSS::extract(cap);
 
-    if (capCss & cap::css::NCSS_BIT) {
-        std::println("NCSS Bit is present...");
+    if ((capCss & cap::css::NOIOCSS_BIT) != 0u) {
+        std::println("No IO command set is supported. Setting CC.CSS to NOIOCSS (0b111)");
+        ccCss = cc::css::NOIOCSS;
+    } else if ((capCss & cap::css::IOCSS_BIT) != 0u) {
+        std::println("IO Command Set is supported. Setting CC.CSS to IOCSS (0b110)");
+        ccCss = cc::css::IOCSS;
+    } else if ((capCss & cap::css::NCSS_BIT) != 0u) {
+        std::println("NVM Command Set is supported. Setting CC.CSS to NCSS (0b000)");
         ccCss = cc::css::NCSS;
     } else {
         std::println("NVME Command Set is not found.");
