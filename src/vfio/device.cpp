@@ -16,16 +16,7 @@
 
 namespace vfio {
 
-VfioDevice::VfioDevice(os::UniqueFd fd) : fd_{std::move(fd)} {
-    vfio_device_info info{};
-    info.argsz = sizeof(info);
-
-    check(::ioctl(fd_.get(), VFIO_DEVICE_GET_INFO, &info) != 0, "VFIO_DEVICE_GET_INFO");
-    // NOTE: for now I aim for PCI devices as NVME is a PCIE device in my QEMU setup, but this
-    // may change?
-    check(!(info.flags & VFIO_DEVICE_FLAGS_PCI), "not a PCI device");
-    check(info.num_regions < 1, "no BAR regions");
-}
+VfioDevice::VfioDevice(os::UniqueFd fd) : fd_{std::move(fd)} { }
 
 vfio_region_info VfioDevice::region_info(std::uint32_t index) const {
     vfio_region_info info{};
@@ -43,7 +34,7 @@ vfio_region_info VfioDevice::region_info(std::uint32_t index) const {
 os::MappedMemory VfioDevice::map_region(std::uint32_t index) const {
     const vfio_region_info info = region_info(index);
 
-    check(!(info.flags & VFIO_REGION_INFO_FLAG_MMAP), "device region does not support mmap");
+    check((info.flags & VFIO_REGION_INFO_FLAG_MMAP) == 0u, "device region does not support mmap");
 
     // NOTE: this really shouldn't use MAP_ANONYMOUS as this is a file backed mmap, and the
     // backing file of the pages are the pages of the device file.

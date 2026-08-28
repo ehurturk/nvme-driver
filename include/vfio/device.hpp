@@ -2,7 +2,6 @@
 
 #include "os/fd.hpp"
 #include "os/mmap.hpp"
-#include "vfio/error.hpp"
 
 #include <linux/pci_regs.h>  // for PCI_COMMAND, PCI_COMMAND_MEMORY, PCI_COMMAND_MASTER
 #include <linux/vfio.h>
@@ -11,7 +10,6 @@
 #include <unistd.h>
 
 #include <cstdint>
-#include <utility>
 
 namespace vfio {
 

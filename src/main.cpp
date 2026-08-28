@@ -1,8 +1,6 @@
 #include "dma/heap.hpp"
 #include "nvme/admin/api.hpp"
-#include "nvme/cid.hpp"
 #include "nvme/controller.hpp"
-#include "nvme/queue_entry.hpp"
 #include "nvme/spec.hpp"
 #include "os/mmio.hpp"
 #include "vfio/container.hpp"
@@ -102,12 +100,7 @@ int main() {
     try {
         vfio::VfioContainer container;
         vfio::VfioGroup group{std::format("/dev/vfio/{}", NVME_GROUP_ID), container};
-        vfio::VfioDevice device = group.get_device(NVME_PCI_ADDR);
-
-        // vfio-pci leaves the Bus Master Enabled (BME) bit in the Command register of a PCIe
-        // device's configuration space turned off by default, therefore this has to be manually
-        // turned on for the device to perform DMA.
-        device.enable_bus_master();
+        vfio::VfioDevice& device = group.get_device(NVME_PCI_ADDR);
 
         dma::DmaHeap dma_heap{container};
 

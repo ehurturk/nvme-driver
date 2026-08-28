@@ -134,7 +134,7 @@ read_error_log(Controller& controller, dma::DmaHeap& heap, std::uint32_t max_ent
 
     std::vector<ErrorLogEntry> entries;
     for (std::uint32_t i = 0; i < max_entries; ++i) {
-        ErrorLogEntry entry{buf.uva() + i * ErrorLogEntry::SIZE};
+        ErrorLogEntry entry{buf.uva() + (i * ErrorLogEntry::SIZE)};
         if (entry.error_count() != 0) {
             entries.push_back(entry);
         }
