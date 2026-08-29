@@ -7,22 +7,30 @@
 #include "nvme/spec.hpp"
 #include "nvme/submission_queue.hpp"
 #include "nvme/traits.hpp"
+#include "nvme/command.hpp"
 #include "utils.hpp"
 
 #include <vector>
 
 namespace nvme {
 
+class QueuePair {
+protected:
+    QueuePair(QueueId qid, dma::DmaHeap& heap, ControllerRegisters& cregs, std::size_t size);
+
+    dma::DmaBuffer memory_;
+    ControllerRegisters::Doorbells dbs_;
+};
+
+
 // NOTE: "Typical NVMe implementation attempts to allocate
 //        a maximum of 1 queue pair per host CPU core."
 //        The Admin Submission Queue and Admin Completion Queue are required to be in physically
 //        contiguous memory.
 
-class AdminQueuePair {
+class AdminQueuePair : protected QueuePair {
 public:
-    static constexpr std::uint16_t AQ_ID = 0;
-
-    AdminQueuePair(dma::DmaHeap& heap, ControllerRegisters::Doorbells doorbells);
+    AdminQueuePair(dma::DmaHeap& heap, ControllerRegisters& cregs);
 
     ~AdminQueuePair() = default;
 
@@ -32,11 +40,9 @@ public:
     AdminQueuePair& operator=(AdminQueuePair&&) = delete;
 
     std::uint64_t sq_iova() const;
-
     std::uint64_t cq_iova() const;
 
     SubmissionQueue<AdminQueueKind>& sq();
-
     CompletionQueue<AdminQueueKind>& cq();
 
 private:
@@ -56,18 +62,14 @@ private:
         return utils::page_round_up(cq_bytes());
     }
 
-private:
-    dma::DmaBuffer memory_;
     SubmissionQueue<AdminQueueKind> sq_;
     CompletionQueue<AdminQueueKind> cq_;
 };
 
-class IOQueuePair {
+class IOQueuePair: protected QueuePair {
 private:
     std::vector<SubmissionQueue<IOQueueKind>> sqs_;
     CompletionQueue<IOQueueKind> cq_;
-
-    dma::DmaBuffer mem_;
 };
 
 }  // namespace nvme

@@ -106,7 +106,7 @@ int main() {
 
         os::MappedMemory bar0 = device.map_region(VFIO_PCI_BAR0_REGION_INDEX);
 
-        nvme::Controller controller{{.bar0 = os::MmioRegion{bar0.data()}, .dma = dma_heap}};
+        nvme::Controller controller{nvme::NvmeDeviceHandle(os::MmioRegion{bar0.data()}, dma_heap)};
 
         if (auto configured = controller.configure(); !configured) {
             std::println("[ERROR]: {}", configured.error().reason);
@@ -158,15 +158,8 @@ int main() {
         }
 
         std::println("Created IO SQ (qid {}, cqid {})", IO_QPAIR_ID, IO_QPAIR_ID);
-        std::println("=========");
 
-        auto& aq = controller.admin_queues();
-        auto& asq = aq.sq();
-        auto& acq = aq.cq();
 
-        std::println("Final ASQ head: {}", asq.head());
-        std::println("Final ASQ tail: {}", asq.tail());
-        std::println("\nFinal ACQ tail: {}", acq.head());
     } catch (const std::exception& e) {
         std::println("[FATAL]: {}", e.what());
         return EXIT_FAILURE;

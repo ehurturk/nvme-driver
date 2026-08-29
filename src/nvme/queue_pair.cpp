@@ -6,15 +6,21 @@
 #include "nvme/registers.hpp"
 #include "nvme/submission_queue.hpp"
 #include "nvme/traits.hpp"
+#include "nvme/spec.hpp"
 
 #include <cstdint>
 
 namespace nvme {
 
-AdminQueuePair::AdminQueuePair(dma::DmaHeap& heap, ControllerRegisters::Doorbells doorbells)
-    : memory_{heap.alloc(sq_region_bytes() + cq_region_bytes())},
-      sq_{dma::DmaView{memory_}.subview(0, sq_region_bytes()), doorbells.sq_tail},
-      cq_{dma::DmaView{memory_}.subview(sq_region_bytes(), cq_region_bytes()), doorbells.cq_head} {
+QueuePair::QueuePair(QueueId qid, dma::DmaHeap& heap, ControllerRegisters& cregs, std::size_t size) 
+    : memory_{heap.alloc(size)},
+      dbs_{cregs.doorbells(qid.value)} {
+}
+
+AdminQueuePair::AdminQueuePair(dma::DmaHeap& heap, ControllerRegisters& cregs)
+    : QueuePair(constants::ADMIN_QID, heap, cregs, sq_region_bytes() + cq_region_bytes()),
+      sq_{dma::DmaView{memory_}.subview(0, sq_region_bytes()), dbs_.sq_tail},
+      cq_{dma::DmaView{memory_}.subview(sq_region_bytes(), cq_region_bytes()), dbs_.cq_head} {
 }
 
 std::uint64_t AdminQueuePair::sq_iova() const {

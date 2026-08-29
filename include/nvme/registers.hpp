@@ -1,6 +1,5 @@
 #pragma once
 
-#include "nvme/spec.hpp"
 #include "os/mmio.hpp"
 
 #include <cassert>

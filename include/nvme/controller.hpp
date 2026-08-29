@@ -2,13 +2,11 @@
 
 #include "../dma/heap.hpp"
 #include "../os/mmio.hpp"
-#include "../utils.hpp"
 #include "cid.hpp"
 #include "nvme/command.hpp"
 #include "nvme/queue_entry.hpp"
 #include "queue_pair.hpp"
 #include "registers.hpp"
-#include "spec.hpp"
 
 #include <cassert>
 #include <chrono>
@@ -17,8 +15,6 @@
 #include <expected>
 #include <format>
 #include <optional>
-#include <print>
-#include <string>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -28,6 +24,13 @@ namespace nvme {
 using namespace std::chrono_literals;
 
 struct NvmeDeviceHandle {
+    NvmeDeviceHandle(os::MmioRegion bar0, dma::DmaHeap& dma): bar0{bar0}, dma{dma} {
+    }
+
+    os::MmioRegion bar_region() const { return bar0; }
+    dma::DmaHeap& dma_heap() const { return dma; }
+
+private:
     os::MmioRegion bar0;
     dma::DmaHeap& dma;
 };
@@ -137,7 +140,6 @@ private:
     // en = 0b1 -> enable
     bool change_controller_state_to(std::uint8_t en);
 
-private:
     ControllerRegisters regs_;
     AdminQueuePair admin_queue_pair_;
     std::chrono::milliseconds timeout_;

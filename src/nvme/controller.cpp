@@ -18,8 +18,8 @@
 namespace nvme {
 
 Controller::Controller(NvmeDeviceHandle device)
-    : regs_{device.bar0},
-      admin_queue_pair_{device.dma, regs_.doorbells(AdminQueuePair::AQ_ID)},
+    : regs_{device.bar_region()},
+      admin_queue_pair_{device.dma_heap(), regs_},
       timeout_{125ms},
       admin_cid_allocator_{constants::AQ_DEPTH}  // max 32 elements could be present at a queue
 {

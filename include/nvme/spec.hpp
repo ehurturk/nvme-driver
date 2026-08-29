@@ -1,6 +1,7 @@
 #pragma once
 
 #include "utils.hpp"
+#include "command.hpp"
 
 #include <chrono>
 #include <cstddef>
@@ -117,6 +118,8 @@ static constexpr std::size_t ADM_CQES = 4;
 
 static constexpr std::size_t IO_SQES = 6;
 static constexpr std::size_t IO_CQES = 4;
+
+static constexpr QueueId ADMIN_QID = QueueId{1};
 
 // number of queues:
 constexpr int NR_IO_SQ = 64;
