@@ -1,7 +1,7 @@
 #pragma once
 
-#include "utils.hpp"
 #include "command.hpp"
+#include "utils.hpp"
 
 #include <chrono>
 #include <cstddef>
@@ -103,11 +103,15 @@ namespace constants {
 // include/linux/nvme.h
 
 // These are queue sizes, i.e. # of elements in a queue
+static constexpr std::size_t MAX_IO_QUEUE_DEPTH = 65536;
+static constexpr std::size_t MAX_ADMIN_QUEUE_DEPTH = 4096;
+static constexpr std::size_t MIN_QUEUE_DEPTH = 2;
+
 static constexpr std::size_t AQ_DEPTH = 32;
-static_assert(AQ_DEPTH <= 4096 && AQ_DEPTH > 2);
+static_assert(AQ_DEPTH <= 4096 && AQ_DEPTH > MIN_QUEUE_DEPTH);
 
 static constexpr std::size_t IO_DEPTH = 1024;
-static_assert(IO_DEPTH <= 65536 && IO_DEPTH > 2);
+static_assert(IO_DEPTH <= MAX_IO_QUEUE_DEPTH && IO_DEPTH > MIN_QUEUE_DEPTH);
 
 // For the queue entry size constants,
 // the NVMe spec says "the value
@@ -119,7 +123,7 @@ static constexpr std::size_t ADM_CQES = 4;
 static constexpr std::size_t IO_SQES = 6;
 static constexpr std::size_t IO_CQES = 4;
 
-static constexpr QueueId ADMIN_QID = QueueId{1};
+static constexpr QueueId ADMIN_QID = QueueId{0};
 
 // number of queues:
 constexpr int NR_IO_SQ = 64;
@@ -127,7 +131,6 @@ constexpr int NR_IO_CQ = 64;
 
 static_assert(NR_IO_SQ >= 1 && NR_IO_SQ < 65535);
 static_assert(NR_IO_CQ >= 1 && NR_IO_CQ < 65535);
-
 
 // Linux uses 60s for admin cmd timeout asw
 static constexpr std::chrono::seconds ADMIN_CMD_TIMEOUT{60};

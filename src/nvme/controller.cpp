@@ -14,12 +14,13 @@
 #include <optional>
 #include <print>
 #include <thread>
+#include <utility>
 
 namespace nvme {
 
 Controller::Controller(NvmeDeviceHandle device)
     : regs_{device.bar_region()},
-      admin_queue_pair_{device.dma_heap(), regs_},
+      admin_queue_pair_{constants::ADMIN_QID, device.dma_heap(), regs_, constants::AQ_DEPTH},
       timeout_{125ms},
       admin_cid_allocator_{constants::AQ_DEPTH}  // max 32 elements could be present at a queue
 {
@@ -109,7 +110,8 @@ Result<void> Controller::configure() {
         ccCss = cc::css::NOIOCSS;
     } else {
         return std::unexpected{Error{
-            .reason = std::format("Controller supports no usable command set (CAP.CSS = {:#x})", capCss),
+            .reason =
+                std::format("Controller supports no usable command set (CAP.CSS = {:#x})", capCss),
             .severity = Error::Severity::ERROR
         }};
     }
@@ -154,8 +156,48 @@ Result<void> Controller::configure() {
     return {};
 }
 
-AdminQueuePair& Controller::admin_queues() {
+QueuePair& Controller::admin_queues() {
     return admin_queue_pair_;
+}
+
+void Controller::set_state(ControllerState state) {
+    state_ = std::move(state);
+}
+
+const std::optional<ControllerState>& Controller::state() const {
+    return state_;
+}
+
+void Controller::grant_io_queues(std::uint16_t count) {
+    io_qid_grant_ = count;
+}
+
+Result<QueueId> Controller::allocate_io_qid() {
+    if (!free_io_qids_.empty()) {
+        const QueueId qid{free_io_qids_.back()};
+        free_io_qids_.pop_back();
+        return qid;
+    }
+
+    if (next_io_qid_ > io_qid_grant_) {
+        return std::unexpected{Error{
+            .reason = std::format(
+                "No IO queue IDs available ({} allowed max via Set Features Number of Queues)",
+                io_qid_grant_
+            ),
+            .severity = Error::Severity::ERROR
+        }};
+    }
+
+    return QueueId{next_io_qid_++};
+}
+
+void Controller::release_io_qid(QueueId qid) {
+    free_io_qids_.push_back(qid.value);
+}
+
+QueuePair Controller::make_io_queue_pair(QueueId qid, dma::DmaHeap& heap, std::size_t depth) {
+    return QueuePair{qid, heap, regs_, depth};
 }
 
 std::uint32_t Controller::max_io_queue_entries() const {
@@ -232,6 +274,7 @@ void Controller::abandon_admin_command(Cid::value_type cid) {
     }
 
     if (it->second.result.has_value()) {
+        admin_cid_allocator_.release(it->second.cid);
         in_flight_cmds_.erase(it);
     } else {
         it->second.abandoned = true;
@@ -251,6 +294,7 @@ std::optional<Error> Controller::accept_completion(const wire::CompletionEntry& 
     InFlightCommand& entry = it->second;
     if (entry.abandoned) {
         // nobody is waiting on this result any more, might as well drop it and release the CID
+        admin_cid_allocator_.release(entry.cid);
         in_flight_cmds_.erase(it);
         return std::nullopt;
     }
@@ -277,6 +321,7 @@ std::optional<wire::CompletionEntry> Controller::take_completion(Cid::value_type
     }
 
     const wire::CompletionEntry completion = *it->second.result;
+    admin_cid_allocator_.release(it->second.cid);
     in_flight_cmds_.erase(it);
     return completion;
 }

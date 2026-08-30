@@ -3,7 +3,7 @@
 #include "dma/buffer.hpp"
 #include "lifetime.hpp"
 #include "nvme/queue_entry.hpp"
-#include "nvme/traits.hpp"
+#include "nvme/spec.hpp"
 #include "utils.hpp"
 
 #include <atomic>
@@ -12,25 +12,21 @@
 #include <optional>
 
 namespace nvme {
-template<class Kind, std::size_t N = QueueTraits<Kind>::depth>
 class CompletionQueue {
 public:
-    using Traits = QueueTraits<Kind>;
     using Entry = wire::CompletionEntry;
 
-    static constexpr std::size_t depth = N;
-
-    static_assert(std::has_single_bit(depth), "Queue size must be a power of 2.");
     static_assert(sizeof(Entry) == 16, "Completion queue entry size must be 16 bytes.");
 
     static_assert(std::is_trivially_copyable_v<Entry>);
     static_assert(std::is_standard_layout_v<Entry>);
-    static_assert(depth > 1);
-    static_assert(depth <= 65536);
 
-    CompletionQueue(dma::DmaView memory, volatile std::uint32_t* head_doorbell)
-        : memory_{memory}, doorbell_{head_doorbell}, expected_bit_{1} {
-        assert(memory_.size >= depth * sizeof(Entry));
+    CompletionQueue(dma::DmaView memory, volatile std::uint32_t* head_doorbell, std::size_t depth)
+        : memory_{memory}, doorbell_{head_doorbell}, depth_{depth}, expected_bit_{1} {
+        assert(std::has_single_bit(depth_) && "Queue size must be a power of 2.");
+        assert(depth_ > 1);
+        assert(depth_ <= constants::MAX_IO_QUEUE_DEPTH); // although admin queues are 4096 i think we can default the bound to IO Queue
+        assert(memory_.size >= depth_ * sizeof(Entry));
     }
 
     // non blocking poll
@@ -42,7 +38,7 @@ public:
         //        Expecting phase: 1
 
         // 1) Peek at the CQE at head slot
-        std::byte* dst = memory_.uva + head_ * sizeof(Entry);
+        std::byte* dst = memory_.uva + (head_ * sizeof(Entry));
 
         assert(reinterpret_cast<std::uintptr_t>(dst) % alignof(Entry) == 0);
 
@@ -60,7 +56,7 @@ public:
         Entry cqe = *e;
 
         // advance the head index
-        head_ = (head_ + 1) & (depth - 1);
+        head_ = (head_ + 1) & (depth_ - 1);
 
         // on each queue rollover, the phase bit should flip
         if (head_ == 0) {
@@ -73,6 +69,10 @@ public:
         return cqe;
     }
 
+    std::size_t depth() const {
+        return depth_;
+    }
+
     std::size_t head() const {
         return head_;
     }
@@ -82,9 +82,9 @@ private:
         *doorbell_ = static_cast<std::uint32_t>(head_);
     }
 
-private:
     dma::DmaView memory_;
     volatile std::uint32_t* doorbell_;
+    std::size_t depth_;
     std::size_t head_{};
 
     std::uint8_t expected_bit_;

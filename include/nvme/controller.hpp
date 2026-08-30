@@ -4,6 +4,7 @@
 #include "../os/mmio.hpp"
 #include "cid.hpp"
 #include "nvme/command.hpp"
+#include "nvme/controller_state.hpp"
 #include "nvme/queue_entry.hpp"
 #include "queue_pair.hpp"
 #include "registers.hpp"
@@ -18,17 +19,23 @@
 #include <thread>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace nvme {
 
 using namespace std::chrono_literals;
 
 struct NvmeDeviceHandle {
-    NvmeDeviceHandle(os::MmioRegion bar0, dma::DmaHeap& dma): bar0{bar0}, dma{dma} {
+    NvmeDeviceHandle(os::MmioRegion bar0, dma::DmaHeap& dma) : bar0{bar0}, dma{dma} {
     }
 
-    os::MmioRegion bar_region() const { return bar0; }
-    dma::DmaHeap& dma_heap() const { return dma; }
+    os::MmioRegion bar_region() const {
+        return bar0;
+    }
+
+    dma::DmaHeap& dma_heap() const {
+        return dma;
+    }
 
 private:
     os::MmioRegion bar0;
@@ -72,7 +79,7 @@ public:
     template<CommandDescriptor Command>
     Result<CommandPending<Command>> submit_admin_command(Command command) {
         Cid cmd_id = admin_cid_allocator_.allocate();
-        auto cid_val = cmd_id.get();
+        auto cid_val = cmd_id.value;
 
         wire::SubmissionEntry cmd = command.build(cid_val);
 
@@ -81,7 +88,7 @@ public:
 
         auto [it, inserted] = in_flight_cmds_.try_emplace(
             cid_val,
-            InFlightCommand{.cid = std::move(cmd_id), .result = std::nullopt, .cmd = cmd}
+            InFlightCommand{.cid = cmd_id, .result = std::nullopt, .cmd = cmd}
         );
 
         if (!inserted) {
@@ -95,11 +102,24 @@ public:
         return CommandPending<Command>{*this, cid_val};
     }
 
-    AdminQueuePair& admin_queues();
+    QueuePair& admin_queues();
 
     std::uint32_t max_io_queue_entries() const;
 
     bool requires_contiguous_queues() const;
+
+    // sets controller's state after an Identify Controller command is issued
+    void set_state(ControllerState state);
+
+    const std::optional<ControllerState>& state() const;
+
+    void grant_io_queues(std::uint16_t count);
+
+    Result<QueueId> allocate_io_qid();
+
+    void release_io_qid(QueueId qid);
+
+    QueuePair make_io_queue_pair(QueueId qid, dma::DmaHeap& heap, std::size_t depth);
 
 private:
     template<CommandDescriptor Command>
@@ -141,12 +161,19 @@ private:
     bool change_controller_state_to(std::uint8_t en);
 
     ControllerRegisters regs_;
-    AdminQueuePair admin_queue_pair_;
+    QueuePair admin_queue_pair_;
     std::chrono::milliseconds timeout_;
 
     CidAllocator admin_cid_allocator_;
 
     std::unordered_map<Cid::value_type, InFlightCommand> in_flight_cmds_;
+
+    std::optional<ControllerState> state_;
+
+    // qid management state
+    std::uint16_t io_qid_grant_{0};
+    std::uint16_t next_io_qid_{1};
+    std::vector<std::uint16_t> free_io_qids_;
 };
 
 template<CommandDescriptor Command>

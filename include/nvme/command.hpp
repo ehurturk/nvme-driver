@@ -6,15 +6,12 @@
 #include <concepts>
 #include <cstdint>
 #include <expected>
-#include <format>
 #include <optional>
 #include <string>
-#include <utility>
 
 namespace nvme {
 
 class Controller;
-
 
 struct QueueId {
     std::uint16_t value;
@@ -32,15 +29,15 @@ concept CommandDescriptor = requires(const C c, std::uint16_t cid, const wire::C
 };
 
 struct InFlightCommand {
-    Cid cid;
-    std::optional<wire::CompletionEntry> result;
-    wire::SubmissionEntry cmd;
+    Cid cid {0};
+    std::optional<wire::CompletionEntry> result{std::nullopt};
+    wire::SubmissionEntry cmd{};
 
     bool abandoned = false;
 };
 
 struct Error {
-    enum class Severity {
+    enum class Severity : std::uint8_t {
         INFO,
         WARN,
         ERROR

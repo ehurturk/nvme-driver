@@ -16,7 +16,8 @@
 
 namespace vfio {
 
-VfioDevice::VfioDevice(os::UniqueFd fd) : fd_{std::move(fd)} { }
+VfioDevice::VfioDevice(os::UniqueFd fd) : fd_{std::move(fd)} {
+}
 
 vfio_region_info VfioDevice::region_info(std::uint32_t index) const {
     vfio_region_info info{};

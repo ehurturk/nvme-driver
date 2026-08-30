@@ -1,6 +1,9 @@
 #include "dma/heap.hpp"
 #include "nvme/admin/api.hpp"
+#include "nvme/command.hpp"
 #include "nvme/controller.hpp"
+#include "nvme/controller_state.hpp"
+#include "nvme/queue_pair.hpp"
 #include "nvme/spec.hpp"
 #include "os/mmio.hpp"
 #include "vfio/container.hpp"
@@ -12,6 +15,7 @@
 #include <cstdlib>
 #include <exception>
 #include <format>
+#include <optional>
 #include <print>
 #include <string>
 
@@ -19,15 +23,23 @@ namespace {
 
 const std::string NVME_PCI_ADDR{"0000:01:00.0"};
 constexpr int NVME_GROUP_ID = 6;
-constexpr std::uint16_t IO_QPAIR_ID = 1;
 
-void execute_identify_controller_command(nvme::Controller& controller, dma::DmaHeap& heap) {
+std::optional<nvme::ControllerState>
+execute_identify_controller_command(nvme::Controller& controller, dma::DmaHeap& heap) {
     auto identify_result = nvme::admin::identify_controller(controller, heap);
 
     if (!identify_result) {
         std::println("[ERROR]: {}", identify_result.error().reason);
-        return;
+        return std::nullopt;
     }
+
+    nvme::ControllerState state{
+        identify_result->mdts(),
+        identify_result->cntlid(),
+        identify_result->sqes(),
+        identify_result->cqes(),
+        identify_result->nn()
+    };
 
     std::println("NVMe Properties:");
     std::println("\tVersion ID: {}", identify_result->vid());
@@ -38,9 +50,15 @@ void execute_identify_controller_command(nvme::Controller& controller, dma::DmaH
     std::println("\tSubmission Queue Entry Size: {}", identify_result->sqes());
     std::println("\tCompletion Queue Entry Size: {}", identify_result->cqes());
     std::println("\tNumber of Namespaces: {}", identify_result->nn());
+
+    return state;
 }
 
-void execute_identify_namespace_commands(nvme::Controller& controller, dma::DmaHeap& dma_heap) {
+void execute_identify_namespace_commands(
+    nvme::Controller& controller,
+    dma::DmaHeap& dma_heap,
+    nvme::ControllerState& state
+) {
     auto nsids = nvme::admin::list_active_namespaces(controller, dma_heap);
     if (!nsids) {
         std::println("[ERROR]: {}", nsids.error().reason);
@@ -64,6 +82,17 @@ void execute_identify_namespace_commands(nvme::Controller& controller, dma::DmaH
         std::println("\tIn use (NUSE): {} LBAs", ns->nuse());
         std::println("\tLBA size: {} bytes", ns->lba_size_bytes());
         std::println("\tMetadata size: {} bytes", ns->active_lba_format().metadata_size);
+
+        state.add_namespace(
+            nvme::NamespaceInfo{
+                .nsid = nsid,
+                .size = ns->nsze(),
+                .capacity = ns->ncap(),
+                .in_use = ns->nuse(),
+                .lba_size_bytes = ns->lba_size_bytes(),
+                .metadata_size = ns->active_lba_format().metadata_size
+            }
+        );
     }
 }
 
@@ -113,8 +142,14 @@ int main() {
             return EXIT_FAILURE;
         }
 
-        execute_identify_controller_command(controller, dma_heap);
-        execute_identify_namespace_commands(controller, dma_heap);
+        auto state = execute_identify_controller_command(controller, dma_heap);
+        if (!state) {
+            return EXIT_FAILURE;
+        }
+
+        execute_identify_namespace_commands(controller, dma_heap, *state);
+        controller.set_state(std::move(*state));
+
         execute_read_logs_command(controller, dma_heap);
 
         {
@@ -133,32 +168,19 @@ int main() {
             std::println("# of IOCQs allocated: {}", allocated->allocated_cq);
         }
 
-        // Create a Create IO Completion Queue Command
-        nvme::Result<dma::DmaBuffer> iocq_buf =
-            na::create_io_cq(controller, dma_heap, nvme::QueueId{IO_QPAIR_ID}, nvme::constants::IO_DEPTH);
-        if (!iocq_buf) {
-            std::println("[ERROR]: {}", iocq_buf.error().reason);
+        nvme::Result<nvme::QueuePair> io_qpair =
+            na::create_io_queue_pair(controller, dma_heap, nvme::constants::IO_DEPTH);
+
+        if (!io_qpair) {
+            std::println("[ERROR]: {}", io_qpair.error().reason);
             return EXIT_FAILURE;
         }
 
-        std::println("Created IO CQ (qid {})", IO_QPAIR_ID);
-
-        // Create a Create IO Submission Queue Command
-        nvme::Result<dma::DmaBuffer> iosq_buf = na::create_io_sq(
-            controller,
-            dma_heap,
-            nvme::QueueId{IO_QPAIR_ID},
-            nvme::CompletionQueueId{IO_QPAIR_ID},
-            nvme::constants::IO_DEPTH
+        std::println(
+            "Created IO queue pair (qid {}, cqid {})",
+            io_qpair->id().value,
+            io_qpair->id().value
         );
-
-        if (!iosq_buf) {
-            std::println("[ERROR]: {}", iosq_buf.error().reason);
-            return EXIT_FAILURE;
-        }
-
-        std::println("Created IO SQ (qid {}, cqid {})", IO_QPAIR_ID, IO_QPAIR_ID);
-
 
     } catch (const std::exception& e) {
         std::println("[FATAL]: {}", e.what());

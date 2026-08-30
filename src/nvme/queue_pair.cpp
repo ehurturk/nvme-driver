@@ -5,37 +5,46 @@
 #include "nvme/completion_queue.hpp"
 #include "nvme/registers.hpp"
 #include "nvme/submission_queue.hpp"
-#include "nvme/traits.hpp"
-#include "nvme/spec.hpp"
 
 #include <cstdint>
 
 namespace nvme {
 
-QueuePair::QueuePair(QueueId qid, dma::DmaHeap& heap, ControllerRegisters& cregs, std::size_t size) 
-    : memory_{heap.alloc(size)},
-      dbs_{cregs.doorbells(qid.value)} {
+QueuePair::QueuePair(QueueId qid, dma::DmaHeap& heap, ControllerRegisters& cregs, std::size_t depth)
+    : qid_{qid},
+      memory_{heap.alloc(sq_region_bytes(depth) + cq_region_bytes(depth))},
+      dbs_{cregs.doorbells(qid.value)},
+      sq_region_bytes_{sq_region_bytes(depth)},
+      cq_region_bytes_{cq_region_bytes(depth)},
+      sq_{dma::DmaView{memory_}.subview(0, sq_region_bytes_), dbs_.sq_tail, depth},
+      cq_{dma::DmaView{memory_}.subview(sq_region_bytes_, cq_region_bytes_), dbs_.cq_head, depth} {
 }
 
-AdminQueuePair::AdminQueuePair(dma::DmaHeap& heap, ControllerRegisters& cregs)
-    : QueuePair(constants::ADMIN_QID, heap, cregs, sq_region_bytes() + cq_region_bytes()),
-      sq_{dma::DmaView{memory_}.subview(0, sq_region_bytes()), dbs_.sq_tail},
-      cq_{dma::DmaView{memory_}.subview(sq_region_bytes(), cq_region_bytes()), dbs_.cq_head} {
+QueueId QueuePair::id() const {
+    return qid_;
 }
 
-std::uint64_t AdminQueuePair::sq_iova() const {
+std::uint64_t QueuePair::sq_iova() const {
     return memory_.iova();
 }
 
-std::uint64_t AdminQueuePair::cq_iova() const {
-    return memory_.iova() + sq_region_bytes();
+std::uint64_t QueuePair::cq_iova() const {
+    return memory_.iova() + sq_region_bytes_;
 }
 
-SubmissionQueue<AdminQueueKind>& AdminQueuePair::sq() {
+dma::DmaView QueuePair::sq_region() const {
+    return dma::DmaView{memory_}.subview(0, sq_region_bytes_);
+}
+
+dma::DmaView QueuePair::cq_region() const {
+    return dma::DmaView{memory_}.subview(sq_region_bytes_, cq_region_bytes_);
+}
+
+SubmissionQueue& QueuePair::sq() {
     return sq_;
 }
 
-CompletionQueue<AdminQueueKind>& AdminQueuePair::cq() {
+CompletionQueue& QueuePair::cq() {
     return cq_;
 }
 

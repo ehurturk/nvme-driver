@@ -1,10 +1,12 @@
 #include "nvme/admin/api.hpp"
 
 #include "nvme/admin/create_io_queue.hpp"
+#include "nvme/admin/delete_io_queue.hpp"
 #include "nvme/admin/set_features.hpp"
 #include "nvme/controller.hpp"
 #include "nvme/queue_entry.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <expected>
 #include <format>
@@ -48,9 +50,7 @@ identify_namespace(Controller& controller, dma::DmaHeap& heap, std::uint32_t nsi
         return std::unexpected{done.error()};
     }
     if (!done->ok()) {
-        return std::unexpected{
-            completion_error(std::format("Identify Namespace {}", nsid), *done)
-        };
+        return std::unexpected{completion_error(std::format("Identify Namespace {}", nsid), *done)};
     }
 
     return cmd.data();
@@ -153,11 +153,16 @@ set_number_of_queues(Controller& controller, std::uint16_t nsq, std::uint16_t nc
         return std::unexpected{submitted.error()};
     }
 
-    return submitted->result();
+    auto allocated = submitted->result();
+    if (allocated) {
+        controller.grant_io_queues(std::min(allocated->allocated_sq, allocated->allocated_cq));
+    }
+
+    return allocated;
 }
 
-Result<dma::DmaBuffer>
-create_io_cq(Controller& controller, dma::DmaHeap& heap, QueueId qid, std::uint16_t qsize) {
+Result<QueuePair>
+create_io_queue_pair(Controller& controller, dma::DmaHeap& heap, std::uint16_t qsize) {
     if (qsize > controller.max_io_queue_entries()) {
         return std::unexpected{Error{
             .reason = std::format(
@@ -169,56 +174,40 @@ create_io_cq(Controller& controller, dma::DmaHeap& heap, QueueId qid, std::uint1
         }};
     }
 
-    dma::DmaBuffer buf = heap.alloc(qsize * sizeof(wire::CompletionEntry));
-
-    auto created = controller.execute_admin_command(
-        commands::CreateIoCq{dma::DmaView{buf}, qid, qsize}
-    );
-    if (!created) {
-        return std::unexpected{created.error()};
+    auto qid = controller.allocate_io_qid();
+    if (!qid) {
+        return std::unexpected{qid.error()};
     }
-    if (!created->ok()) {
+
+    QueuePair pair = controller.make_io_queue_pair(*qid, heap, qsize);
+
+    auto created_cq =
+        controller.execute_admin_command(commands::CreateIoCq{pair.cq_region(), *qid, qsize});
+    if (!created_cq || !created_cq->ok()) {
+        controller.release_io_qid(*qid);
+        if (!created_cq) {
+            return std::unexpected{created_cq.error()};
+        }
         return std::unexpected{
-            completion_error(std::format("Create IO CQ {}", qid.value), *created)
+            completion_error(std::format("Create IO CQ {}", qid->value), *created_cq)
         };
     }
 
-    return buf;
-}
-
-Result<dma::DmaBuffer> create_io_sq(
-    Controller& controller,
-    dma::DmaHeap& heap,
-    QueueId qid,
-    CompletionQueueId cqid,
-    std::uint16_t qsize
-) {
-    if (qsize > controller.max_io_queue_entries()) {
-        return std::unexpected{Error{
-            .reason = std::format(
-                "Queue size {} exceeds CAP.MQES limit of {} entries",
-                qsize,
-                controller.max_io_queue_entries()
-            ),
-            .severity = Error::Severity::ERROR
-        }};
-    }
-
-    dma::DmaBuffer buf = heap.alloc(qsize * sizeof(wire::SubmissionEntry));
-
-    auto created = controller.execute_admin_command(
-        commands::CreateIoSq{dma::DmaView{buf}, qid, cqid, qsize}
+    auto created_sq = controller.execute_admin_command(
+        commands::CreateIoSq{pair.sq_region(), *qid, CompletionQueueId{qid->value}, qsize}
     );
-    if (!created) {
-        return std::unexpected{created.error()};
-    }
-    if (!created->ok()) {
+    if (!created_sq || !created_sq->ok()) {
+        auto unused = controller.execute_admin_command(commands::DeleteIoCq{*qid});
+        controller.release_io_qid(*qid);
+        if (!created_sq) {
+            return std::unexpected{created_sq.error()};
+        }
         return std::unexpected{
-            completion_error(std::format("Create IO SQ {}", qid.value), *created)
+            completion_error(std::format("Create IO SQ {}", qid->value), *created_sq)
         };
     }
 
-    return buf;
+    return pair;
 }
 
 }  // namespace nvme::admin
