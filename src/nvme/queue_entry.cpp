@@ -6,16 +6,6 @@
 
 namespace nvme::wire {
 
-SubmissionEntry SubmissionEntry::build(admin::Opcode opc, std::uint16_t cid, Psdt psdt) {
-    SubmissionEntry c{};
-    c.cdw0 = utils::DwordBuilder<>{}
-                 .set<OPC>(utils::to_underlying(opc))
-                 .set<PSDT>(utils::to_underlying(psdt))
-                 .set<CID>(cid)
-                 .get();
-    return c;
-}
-
 std::uint8_t SubmissionEntry::opcode() const {
     return static_cast<std::uint8_t>(OPC::extract(cdw0));
 }

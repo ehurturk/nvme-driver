@@ -24,7 +24,7 @@ public:
 
     QueuePair(const QueuePair&) = delete;
     QueuePair& operator=(const QueuePair&) = delete;
-    
+
     QueuePair(QueuePair&&) noexcept = default;
     QueuePair& operator=(QueuePair&&) noexcept = default;
 

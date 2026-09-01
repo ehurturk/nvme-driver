@@ -1,8 +1,6 @@
 #pragma once
 
 #include "utils.hpp"
-#include "nvme/admin/opcodes.hpp"
-#include "nvme/io/opcodes.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -10,10 +8,6 @@
 #include <type_traits>
 
 namespace nvme {
-
-namespace admin {
-enum class Opcode : std::uint8_t;
-}  // namespace admin
 
 namespace wire {
 
@@ -25,9 +19,6 @@ struct DataPointer {
         return DataPointer{.prp1 = p1, .prp2 = p2};
     }
 };
-
-template <typename Opc>
-concept Opcode = std::same_as<Opc, nvme::admin::Opcode> || std::same_as<Opc, nvme::io::Opcode>;
 
 struct SubmissionEntry {
     enum class Psdt : std::uint8_t {
@@ -48,9 +39,6 @@ struct SubmissionEntry {
     DWRD cdw13;
     DWRD cdw14;
     DWRD cdw15;
-
-    template <Opcode Opc>
-    static SubmissionEntry build(Opc opc, std::uint16_t cid, Psdt psdt = Psdt::Prp);
 
     std::uint8_t opcode() const;
 
@@ -169,8 +157,8 @@ namespace std {
 template<>
 struct formatter<nvme::wire::CompletionStatus> {
     static constexpr auto parse(format_parse_context& ctx) {
-        const auto *it = ctx.begin();
-        
+        const auto* it = ctx.begin();
+
         if (it != ctx.end() && *it != '}') {
             throw format_error("invalid format specifier for nvme::wire::CompletionStatus");
         }
@@ -178,7 +166,7 @@ struct formatter<nvme::wire::CompletionStatus> {
         return it;
     }
 
-    static auto format(const nvme::wire::CompletionStatus& c, format_context& ctx)  {
+    static auto format(const nvme::wire::CompletionStatus& c, format_context& ctx) {
         return format_to(
             ctx.out(),
             "raw=0x{:04x}, "

@@ -38,7 +38,7 @@ struct SetFeatures {
     }
 
     wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept {
-        wire::SubmissionEntry c = wire::SubmissionEntry::build(Opcode::SetFeatures, this_cid);
+        wire::SubmissionEntry c = build_base(Opcode::SetFeatures, this_cid);
 
         c.dptr = wire::DataPointer::prp(prp1);
         c.cdw10 = utils::DwordBuilder<>{}
@@ -78,7 +78,7 @@ struct GetFeatures {
     }
 
     wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept {
-        wire::SubmissionEntry c = wire::SubmissionEntry::build(Opcode::GetFeatures, this_cid);
+        wire::SubmissionEntry c = build_base(Opcode::GetFeatures, this_cid);
 
         c.dptr = wire::DataPointer::prp(prp1);
         c.cdw10 = utils::DwordBuilder<>{}

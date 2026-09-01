@@ -3,7 +3,7 @@
 namespace nvme::admin::commands {
 
 wire::SubmissionEntry AsyncEventRequest::build(std::uint16_t this_cid) const noexcept {
-    return wire::SubmissionEntry::build(Opcode::AsyncEvent, this_cid);
+    return build_base(Opcode::AsyncEvent, this_cid);
 }
 
 AsyncEventRequest::Completion AsyncEventRequest::decode_completion(const wire::CompletionEntry& c) {

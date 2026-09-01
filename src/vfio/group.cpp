@@ -54,7 +54,7 @@ VfioDevice& VfioGroup::get_device(const std::string& pci_addr) {
     check(info.num_regions <= VFIO_PCI_CONFIG_REGION_INDEX, "incorrect BAR regions");
 
     auto [device_it, inserted] = group_device_cache_.try_emplace(pci_addr, std::move(device_fd));
-    
+
     // enable bus master for the device to make it able to handle DMA
     device_it->second.enable_bus_master();
 

@@ -79,15 +79,14 @@ public:
     template<CommandDescriptor Command>
     Result<CommandPending<Command>> submit_admin_command(Command command) {
         Cid cmd_id = admin_cid_allocator_.allocate();
-        auto cid_val = cmd_id.value;
 
-        wire::SubmissionEntry cmd = command.build(cid_val);
+        wire::SubmissionEntry cmd = command.build(cmd_id.value);
 
         auto& asq = admin_queue_pair_.sq();
         asq.push(cmd);  // copies the command into the submission queue's ring queue
 
         auto [it, inserted] = in_flight_cmds_.try_emplace(
-            cid_val,
+            cmd_id,
             InFlightCommand{.cid = cmd_id, .result = std::nullopt, .cmd = cmd}
         );
 
@@ -99,7 +98,7 @@ public:
             }};
         }
 
-        return CommandPending<Command>{*this, cid_val};
+        return CommandPending<Command>{*this, cmd_id};
     }
 
     QueuePair& admin_queues();
@@ -126,18 +125,18 @@ private:
     friend class CommandPending;
 
     // blockingly polls the admin CQ until the completion for cid arrives or the timeout expires
-    Result<wire::CompletionEntry> poll_admin_command(Cid::value_type cid);
+    Result<wire::CompletionEntry> poll_admin_command(Cid cid);
 
     // non-blockingly drains whatever completions are visible on the admin cq
-    std::optional<Result<wire::CompletionEntry>> try_poll_admin_command(Cid::value_type cid);
+    std::optional<Result<wire::CompletionEntry>> try_poll_admin_command(Cid cid);
 
-    void abandon_admin_command(Cid::value_type cid);
+    void abandon_admin_command(Cid cid);
 
     // mark completion's cid as completed and write its result to in flight command map
     std::optional<Error> accept_completion(const wire::CompletionEntry& completion);
 
     // return the completion queue entry for a given cid and release that cid
-    std::optional<wire::CompletionEntry> take_completion(Cid::value_type cid);
+    std::optional<wire::CompletionEntry> take_completion(Cid cid);
 
     bool wait_for(std::predicate auto&& predicate, std::chrono::milliseconds timeout) {
         auto deadline = std::chrono::steady_clock::now() + timeout;
@@ -166,7 +165,7 @@ private:
 
     CidAllocator admin_cid_allocator_;
 
-    std::unordered_map<Cid::value_type, InFlightCommand> in_flight_cmds_;
+    std::unordered_map<Cid, InFlightCommand> in_flight_cmds_;
 
     std::optional<ControllerState> state_;
 
@@ -200,7 +199,7 @@ CommandPending<Command>::~CommandPending() {
 }
 
 template<CommandDescriptor Command>
-Cid::value_type CommandPending<Command>::cid() const {
+Cid CommandPending<Command>::cid() const {
     return cid_;
 }
 
@@ -259,7 +258,7 @@ Result<typename Command::Completion> CommandPending<Command>::result() {
 }
 
 template<CommandDescriptor Command>
-CommandPending<Command>::CommandPending(Controller& controller, Cid::value_type cid)
+CommandPending<Command>::CommandPending(Controller& controller, Cid cid)
     : controller_{&controller}, cid_{cid} {
 }
 

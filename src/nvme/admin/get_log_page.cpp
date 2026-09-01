@@ -111,7 +111,7 @@ std::uint32_t ErrorLogEntry::nsid() const {
 namespace commands {
 
 wire::SubmissionEntry GetLogPage::build(std::uint16_t this_cid) const noexcept {
-    auto c = wire::SubmissionEntry::build(Opcode::GetLogPage, this_cid);
+    auto c = build_base(Opcode::GetLogPage, this_cid);
 
     const std::uint32_t numd = utils::to_zero_based(num_dwords);
 

@@ -4,11 +4,11 @@
 namespace nvme::io::commands {
 
 wire::SubmissionEntry Read::build(std::uint16_t this_cid) const noexcept {
-    wire::SubmissionEntry entry = wire::SubmissionEntry::build(Opcode::Read, this_cid);
+    wire::SubmissionEntry entry = build_base(Opcode::Read, this_cid);
     return entry;
 }
 
-static Read::Completion decode_completion(const wire::CompletionEntry& c) {
+Read::Completion Read::decode_completion(const wire::CompletionEntry& c) {
     Read::Completion comp;
     std::uint8_t status_val = c.status.status_code();
     

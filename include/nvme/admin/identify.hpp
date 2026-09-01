@@ -240,11 +240,7 @@ public:
 
     wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept {
         // set CDW0.PSDT = 0x0 to indicate the use of PRPs for the transfer
-        wire::SubmissionEntry c = wire::SubmissionEntry::build(
-            Opcode::Identify,
-            this_cid,
-            wire::SubmissionEntry::Psdt::Prp
-        );
+        wire::SubmissionEntry c = build_base(Opcode::Identify, this_cid, wire::SubmissionEntry::Psdt::Prp);
 
         c.nsid = nsid_;
         // use only prp1 as a 4 KB buffer fits exactly into a page, so no need to use prp2

@@ -3,7 +3,7 @@
 namespace nvme::admin::commands {
 
 wire::SubmissionEntry CreateIoCq::build(std::uint16_t this_cid) const noexcept {
-    wire::SubmissionEntry c = wire::SubmissionEntry::build(Opcode::CreateIoCq, this_cid);
+    wire::SubmissionEntry c = build_base(Opcode::CreateIoCq, this_cid);
 
     c.dptr = wire::DataPointer::prp(prp1);
     c.cdw10 = utils::DwordBuilder<>{}.set<QID>(qid).set<QSIZE>(utils::to_zero_based(qsize)).get();
@@ -21,7 +21,7 @@ CreateIoCq::Completion CreateIoCq::decode_completion(const wire::CompletionEntry
 }
 
 wire::SubmissionEntry CreateIoSq::build(std::uint16_t this_cid) const noexcept {
-    wire::SubmissionEntry c = wire::SubmissionEntry::build(Opcode::CreateIoSq, this_cid);
+    wire::SubmissionEntry c = build_base(Opcode::CreateIoSq, this_cid);
 
     c.dptr = wire::DataPointer::prp(prp1);
     c.cdw10 = utils::DwordBuilder<>{}.set<QID>(qid).set<QSIZE>(utils::to_zero_based(qsize)).get();

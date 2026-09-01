@@ -25,7 +25,9 @@ public:
         : memory_{memory}, doorbell_{head_doorbell}, depth_{depth}, expected_bit_{1} {
         assert(std::has_single_bit(depth_) && "Queue size must be a power of 2.");
         assert(depth_ > 1);
-        assert(depth_ <= constants::MAX_IO_QUEUE_DEPTH); // although admin queues are 4096 i think we can default the bound to IO Queue
+        assert(
+            depth_ <= constants::MAX_IO_QUEUE_DEPTH
+        );  // although admin queues are 4096 i think we can default the bound to IO Queue
         assert(memory_.size >= depth_ * sizeof(Entry));
     }
 

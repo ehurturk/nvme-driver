@@ -208,7 +208,7 @@ bool Controller::requires_contiguous_queues() const {
     return cap::CQR::extract(regs_.cap()) == 1;
 }
 
-Result<wire::CompletionEntry> Controller::poll_admin_command(Cid::value_type cid) {
+Result<wire::CompletionEntry> Controller::poll_admin_command(Cid cid) {
     if (!in_flight_cmds_.contains(cid)) {
         return std::unexpected{Error{
             .reason = std::format("Polling for CID {}, which is not in flight", cid),
@@ -248,8 +248,7 @@ Result<wire::CompletionEntry> Controller::poll_admin_command(Cid::value_type cid
     }
 }
 
-std::optional<Result<wire::CompletionEntry>>
-Controller::try_poll_admin_command(Cid::value_type cid) {
+std::optional<Result<wire::CompletionEntry>> Controller::try_poll_admin_command(Cid cid) {
     if (!in_flight_cmds_.contains(cid)) {
         return std::unexpected{Error{
             .reason = std::format("Polling for CID {}, which is not in flight", cid),
@@ -267,7 +266,7 @@ Controller::try_poll_admin_command(Cid::value_type cid) {
     return take_completion(cid);
 }
 
-void Controller::abandon_admin_command(Cid::value_type cid) {
+void Controller::abandon_admin_command(Cid cid) {
     const auto it = in_flight_cmds_.find(cid);
     if (it == in_flight_cmds_.end()) {
         return;
@@ -282,7 +281,7 @@ void Controller::abandon_admin_command(Cid::value_type cid) {
 }
 
 std::optional<Error> Controller::accept_completion(const wire::CompletionEntry& completion) {
-    const auto it = in_flight_cmds_.find(completion.cid);
+    const auto it = in_flight_cmds_.find(Cid{completion.cid});
     if (it == in_flight_cmds_.end()) {
         return Error{
             .reason =
@@ -314,7 +313,7 @@ std::optional<Error> Controller::accept_completion(const wire::CompletionEntry& 
     return std::nullopt;
 }
 
-std::optional<wire::CompletionEntry> Controller::take_completion(Cid::value_type cid) {
+std::optional<wire::CompletionEntry> Controller::take_completion(Cid cid) {
     const auto it = in_flight_cmds_.find(cid);
     if (it == in_flight_cmds_.end() || !it->second.result.has_value()) {
         return std::nullopt;
