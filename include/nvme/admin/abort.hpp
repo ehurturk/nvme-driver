@@ -1,6 +1,5 @@
 #pragma once
 
-#include "nvme/admin/opcodes.hpp"
 #include "nvme/command.hpp"
 #include "nvme/queue_entry.hpp"
 #include "utils.hpp"

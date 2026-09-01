@@ -36,7 +36,7 @@ using LBAF_RP = utils::BitField<std::uint32_t, 24, 2>;
 
 // Identify Controller:
 
-IdentifyControllerData::IdentifyControllerData(const std::byte* src) {
+IdentifyControllerData::IdentifyControllerData(const std::byte* src): data_{} {
     std::memcpy(data_.data(), src, SIZE);
 }
 
@@ -82,7 +82,7 @@ std::string_view IdentifyControllerData::str(std::size_t offset, std::size_t len
 
 // IdentifyNamespace:
 
-IdentifyNamespaceData::IdentifyNamespaceData(const std::byte* src) {
+IdentifyNamespaceData::IdentifyNamespaceData(const std::byte* src): data_{} {
     std::memcpy(data_.data(), src, SIZE);
 }
 
@@ -130,10 +130,10 @@ std::uint32_t IdentifyNamespaceData::lba_size_bytes() const {
 
 // IdentifyActiveNamespaceIdList:
 
-IdentifyActiveNamespaceIdListData::IdentifyActiveNamespaceIdListData(const std::byte* src) {
+IdentifyActiveNamespaceIdListData::IdentifyActiveNamespaceIdListData(const std::byte* src): nsid_list_{} {
     std::memcpy(nsid_list_.data(), src, SIZE);
 
-    const auto first_zero = std::ranges::find(nsid_list_, 0U);
+    auto* first_zero = std::ranges::find(nsid_list_, 0U);
     count_ = static_cast<std::size_t>(std::distance(nsid_list_.begin(), first_zero));
 }
 

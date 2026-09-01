@@ -1,4 +1,5 @@
 #include "nvme/admin/abort.hpp"
+#include "nvme/admin/opcodes.hpp"
 
 namespace nvme::admin::commands {
 

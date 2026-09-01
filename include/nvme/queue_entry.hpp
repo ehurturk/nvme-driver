@@ -1,6 +1,8 @@
 #pragma once
 
 #include "utils.hpp"
+#include "nvme/admin/opcodes.hpp"
+#include "nvme/io/opcodes.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -24,6 +26,9 @@ struct DataPointer {
     }
 };
 
+template <typename Opc>
+concept Opcode = std::same_as<Opc, nvme::admin::Opcode> || std::same_as<Opc, nvme::io::Opcode>;
+
 struct SubmissionEntry {
     enum class Psdt : std::uint8_t {
         Prp = 0b00,
@@ -44,7 +49,8 @@ struct SubmissionEntry {
     DWRD cdw14;
     DWRD cdw15;
 
-    static SubmissionEntry build(admin::Opcode opc, std::uint16_t cid, Psdt psdt = Psdt::Prp);
+    template <Opcode Opc>
+    static SubmissionEntry build(Opc opc, std::uint16_t cid, Psdt psdt = Psdt::Prp);
 
     std::uint8_t opcode() const;
 
@@ -162,10 +168,9 @@ static_assert(offsetof(CompletionEntry, status) == 14);
 namespace std {
 template<>
 struct formatter<nvme::wire::CompletionStatus> {
-    constexpr auto parse(format_parse_context& ctx) {
-        auto it = ctx.begin();
-
-        // Only "{}" is supported; reject custom specifiers such as "{:x}".
+    static constexpr auto parse(format_parse_context& ctx) {
+        const auto *it = ctx.begin();
+        
         if (it != ctx.end() && *it != '}') {
             throw format_error("invalid format specifier for nvme::wire::CompletionStatus");
         }
@@ -173,7 +178,7 @@ struct formatter<nvme::wire::CompletionStatus> {
         return it;
     }
 
-    auto format(const nvme::wire::CompletionStatus& c, format_context& ctx) const {
+    static auto format(const nvme::wire::CompletionStatus& c, format_context& ctx)  {
         return format_to(
             ctx.out(),
             "raw=0x{:04x}, "
@@ -186,10 +191,10 @@ struct formatter<nvme::wire::CompletionStatus> {
             "dnr={}",
             c.status,
             c.succeeded(),
-            static_cast<unsigned>(c.phase()),
+            static_cast<unsigned int>(c.phase()),
             utils::to_underlying(c.status_code_type()),
-            static_cast<unsigned>(c.status_code()),
-            static_cast<unsigned>(c.command_retry_delay()),
+            static_cast<unsigned int>(c.status_code()),
+            static_cast<unsigned int>(c.command_retry_delay()),
             c.more(),
             c.do_not_retry()
         );

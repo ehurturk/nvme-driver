@@ -1,7 +1,6 @@
 #pragma once
 
 #include "dma/buffer.hpp"
-#include "nvme/admin/opcodes.hpp"
 #include "nvme/command.hpp"
 #include "nvme/queue_entry.hpp"
 #include "utils.hpp"
@@ -97,7 +96,8 @@ private:
 
 namespace commands {
 
-struct GetLogPage {
+class GetLogPage {
+public:
     GetLogPage(
         dma::DmaView result,
         LogPageId lid,
