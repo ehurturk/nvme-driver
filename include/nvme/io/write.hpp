@@ -73,7 +73,7 @@ private:
     using CDW15_LBAT = utils::BitField<DWRD, 0, 16>;
 
     // state:
-    dma::DmaView _read_buffer; // DPTR
+    dma::DmaView _write_buffer; // DPTR
     DWRD _nsid;
     std::uint64_t _starting_lba;        // CDW10: bits 31:00, CDW11: bits 63:32
     std::uint16_t _nr_blocks_to_write;  // CDW12 bits 15:00

@@ -15,7 +15,7 @@ Write::Write(
     bool limited_retry,
     bool force_unit_access
 )
-    : _read_buffer{read_buffer},
+    : _write_buffer{read_buffer},
       _nsid{nsid},
       _starting_lba{starting_lba},
       _nr_blocks_to_write{nr_blocks_to_write},
@@ -48,6 +48,7 @@ wire::SubmissionEntry Write::build(std::uint16_t this_cid) const noexcept {
     entry.cdw13 = _dataset_management;
 
     entry.nsid = _nsid;
+    entry.dptr = wire::DataPointer::prp(_write_buffer.iova); // TODO: once the buffer is more than a page we really shd use prp lists
 
     return entry;
 }
