@@ -140,3 +140,121 @@ Final ACQ tail: 4
 [INFO] Controller is disabled.
 ```
 
+## IO Commands
+
+### Read & Write commands (5 September 2026)
+
+I have found out that some of the IO commands are not fully described in the Base spec, thus I had to dig out the NVM command set spec and look at the common IO commands from there.
+
+Read and write commands were easy to implement as they have a trivial state (just the starting LBA and number of blocks to read + the namespace id to read from).
+
+I think I spent the most time here learning about namespaces and logical block addresses.
+
+Anyways, I have setup a simple write & read test as follows:
+
+```c++
+// write to namespace id 1 from starting LBA 0 of 4 LBAS
+{
+	dma::DmaBuffer write_buf = dma_heap.alloc(512ull * 4);
+
+	// populate the write buffer
+	std::array<std::byte, 2048> buf{};
+	constexpr std::string_view msg = "hello nvme";
+
+	std::ranges::transform(msg, buf.begin(), [](char c) {
+		return static_cast<std::byte>(c);
+	});
+
+	std::memcpy(write_buf.uva(), buf.data(), buf.size());
+
+	const nvme::io::commands::Write write_cmd {dma::DmaView{write_buf}, 1, 0x0, 4};
+
+	auto done = controller.execute_io_command(*io_qid, write_cmd);
+	if (!done) {
+		std::println("[ERROR]: {}", done.error().reason);
+		return EXIT_FAILURE;
+	}
+
+	if (!done->ok()) {
+		std::println("[ERROR]: Command Error");
+		return EXIT_FAILURE;
+	}
+
+	auto result = nvme::io::commands::Write::decode_completion(*done);
+
+	std::println("[INFO]: Wrote to the NVMe Namespace 1, 4 LBAs wide");
+}
+
+// read from namespace id 1 from starting LBA 0 and read 4 LBAs
+{
+	dma::DmaBuffer read_buf = dma_heap.alloc(512ul * 4);  // read 1 LBA size
+	const nvme::io::commands::Read read_cmd{dma::DmaView{read_buf}, 1, 0x0, 3};
+
+	auto done = controller.execute_io_command(*io_qid, read_cmd);
+	if (!done) {
+		std::println("[ERROR]: {}", done.error().reason);
+		return EXIT_FAILURE;
+	}
+
+	if (!done->ok()) {
+		std::println("[ERROR]: Command Error");
+		return EXIT_FAILURE;
+	}
+
+	auto result = nvme::io::commands::Read::decode_completion(*done);
+
+	std::array<std::byte, 2048ull> res{};
+	std::memcpy(res.data(), read_buf.uva(), res.size());
+
+	// hexdump the result
+	utils::hexdump(res);
+}
+```
+
+Running this, I got:
+
+```
+[INFO]: NVMe Version 1.4
+[INFO] Controller is disabled.
+AMS: Round Robin is supported
+MPSMax: 4
+MPSMin: 0
+Max Queue Entry Size (CAP.MQES): 2047
+NVM Command Set is supported. Setting CC.CSS to NCSS (0b000)
+[INFO] Controller is enabled.
+NVMe Properties:
+        Version ID: 6966
+        Serial Number: deadbeef
+        Model Number: QEMU NVMe Ctrl                          10.2.2
+        Maximum Data Transfer Size: 7
+        Controller ID: 0
+        Submission Queue Entry Size: 102
+        Completion Queue Entry Size: 68
+        Number of Namespaces: 256
+Active namespaces: 1
+Namespace 1:
+        Size (NSZE): 2097152 LBAs
+        Capacity (NCAP): 2097152 LBAs
+        In use (NUSE): 2097152 LBAs
+        LBA size: 512 bytes
+        Metadata size: 0 bytes
+SMART: temperature 323 K, spare 0%, used 0%, read 7 units, written 0 units
+Error log entries: 0
+# of IOSQs allocated: 64
+# of IOCQs allocated: 64
+Created IO queue pair (qid 1, cqid 1)
+[INFO]: Wrote to the NVMe Namespace 1, 4 LBAs wide
+00000000 68 65 6C 6C 6F 20 6E 76 6D 65 00 00 00 00 00 00  |hello nvme......|
+00000010 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+00000020 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+00000030 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+00000040 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+00000050 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+00000060 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+```
+
+Yay! I can read what I write.
+
+Current limitation is that all these IO transfers are inside a single page, therefore I am not using PRP lists or SGLs as of now.
+
+I think I will go on with implementing other IO commands, and then return back to that later.
