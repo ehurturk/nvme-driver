@@ -181,61 +181,61 @@ int main() {
 
         std::println("Created IO queue pair (qid {}, cqid {})", io_qid->value, io_qid->value);
 
-        // // write to namespace id 1 from starting LBA 0 of 4 LBAS
-        // {
-        //     dma::DmaBuffer write_buf = dma_heap.alloc(512ull * 4);
+        // write to namespace id 1 from starting LBA 0 of 4 LBAS
+        {
+            dma::DmaBuffer write_buf = dma_heap.alloc(512ull * 4);
 
-        //     // populate the write buffer
-        //     std::array<std::byte, 2048> buf{};
-        //     constexpr std::string_view msg = "hello nvme";
+            // populate the write buffer
+            std::array<std::byte, 2048> buf{};
+            constexpr std::string_view msg = "hello nvme";
 
-        //     std::ranges::transform(msg, buf.begin(), [](char c) {
-        //         return static_cast<std::byte>(c);
-        //     });
+            std::ranges::transform(msg, buf.begin(), [](char c) {
+                return static_cast<std::byte>(c);
+            });
 
-        //     std::memcpy(write_buf.uva(), buf.data(), 2048ull);
+            std::memcpy(write_buf.uva(), buf.data(), buf.size());
 
-        //     const nvme::io::commands::Write write_cmd {dma::DmaView{write_buf}, 1, 0x0, 4};
+            const nvme::io::commands::Write write_cmd {dma::DmaView{write_buf}, 1, 0x0, 3};
 
-        //     auto done = controller.execute_io_command(*io_qid, write_cmd);
-        //     if (!done) {
-        //         std::println("[ERROR]: {}", done.error().reason);
-        //         return EXIT_FAILURE;
-        //     }
+            auto done = controller.execute_io_command(*io_qid, write_cmd);
+            if (!done) {
+                std::println("[ERROR]: {}", done.error().reason);
+                return EXIT_FAILURE;
+            }
 
-        //     if (!done->ok()) {
-        //         std::println("[ERROR]: Command Error: {}", done->status.succeeded());
-        //         std::println("[ERROR]: Command Error: {}", done->status.status_code());
-        //         std::println(
-        //             "[ERROR]: Command Error: {}",
-        //             static_cast<uint8_t>(done->status.status_code_type())
-        //         );
-        //         return EXIT_FAILURE;
-        //     }
+            if (!done->ok()) {
+                std::println("[ERROR]: Command Error: {}", done->status.succeeded());
+                std::println("[ERROR]: Command Error: {}", done->status.status_code());
+                std::println(
+                    "[ERROR]: Command Error: {}",
+                    static_cast<uint8_t>(done->status.status_code_type())
+                );
+                return EXIT_FAILURE;
+            }
 
-        //     auto result = nvme::io::commands::Write::decode_completion(*done);
-        //     if (result.conflicting_attributes) {
-        //         std::println("[ERROR]: Command status error: conflicting attributes");
-        //         return EXIT_FAILURE;
-        //     }
+            auto result = nvme::io::commands::Write::decode_completion(*done);
+            if (result.conflicting_attributes) {
+                std::println("[ERROR]: Command status error: conflicting attributes");
+                return EXIT_FAILURE;
+            }
 
-        //     if (result.invalid_prot_information) {
-        //         std::println("[ERROR]: Command status error: invalid protection information");
-        //         return EXIT_FAILURE;
-        //     }
+            if (result.invalid_prot_information) {
+                std::println("[ERROR]: Command status error: invalid protection information");
+                return EXIT_FAILURE;
+            }
 
-        //     if (result.write_to_ro_page) {
-        //         std::println("[ERROR]: Command status error: writing to a read only page");
-        //         return EXIT_FAILURE;
-        //     }
+            if (result.write_to_ro_page) {
+                std::println("[ERROR]: Command status error: writing to a read only page");
+                return EXIT_FAILURE;
+            }
 
-        //     std::println("[INFO]: Wrote to the NVMe Namespace 1, 4 LBAs wide");
-        // }
+            std::println("[INFO]: Wrote to the NVMe Namespace 1, 4 LBAs wide");
+        }
 
         // read from namespace id 1 from starting LBA 0 and read 4 LBAs
         {
-            dma::DmaBuffer read_buf = dma_heap.alloc(512ul * 4);  // read 1 LBA size
-            const nvme::io::commands::Read read_cmd{dma::DmaView{read_buf}, 1, 0x0, 4};
+            dma::DmaBuffer read_buf = dma_heap.alloc(512ull * 4);  // read 1 LBA size
+            const nvme::io::commands::Read read_cmd{dma::DmaView{read_buf}, 1, 0x0, 3};
 
             auto done = controller.execute_io_command(*io_qid, read_cmd);
             if (!done) {
@@ -259,8 +259,8 @@ int main() {
                 return EXIT_FAILURE;
             }
 
-            std::array<std::byte, 2048ul> res{};
-            std::memcpy(res.data(), read_buf.uva(), read_buf.size());
+            std::array<std::byte, 2048ull> res{};
+            std::memcpy(res.data(), read_buf.uva(), res.size());
 
             // hexdump the result
             utils::hexdump(res);
