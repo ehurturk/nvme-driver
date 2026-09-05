@@ -99,4 +99,12 @@ constexpr std::size_t page_round_up(std::size_t bytes) {
     return (bytes + PGSIZE - 1) & ~(PGSIZE - 1);
 }
 
+template <typename T>
+constexpr T extract_bits(T value, uint8_t low_bit, uint8_t high_bit) {
+    uint8_t length = high_bit - low_bit + 1;
+    T mask = (length >= (sizeof(T) * 8)) ? static_cast<T>(~0ULL) : static_cast<T>((1ULL << length) - 1);
+    
+    return (value >> low_bit) & mask;
+}
+
 }  // namespace utils

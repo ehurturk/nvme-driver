@@ -31,7 +31,8 @@ enum class QueuePriority : std::uint8_t {
 //                 are disabled.
 //              2 - 15: Reserved
 //              16 - 31: Interrupt Vector (IV): Transport specific (if PCIe it is MSI-X i think?)
-struct CreateIoCq {
+class CreateIoCq {
+public:
     CreateIoCq(
         dma::DmaView queue_buf,
         QueueId qid,
@@ -100,7 +101,8 @@ static_assert(CommandDescriptor<CreateIoCq>);
 // CDW12 -> bits 0 - 15: NVM Set Identifier (NVMSETID): Indicates the identifier of the NVM Set
 //                       to be associated with this SQ.
 //                       If this is 0x0 then this SQ is not associated with any NVM Set
-struct CreateIoSq {
+class CreateIoSq {
+public:
     CreateIoSq(
         dma::DmaView queue_buf,
         QueueId qid,
