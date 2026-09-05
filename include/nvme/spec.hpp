@@ -134,6 +134,8 @@ static_assert(NR_IO_CQ >= 1 && NR_IO_CQ < 65535);
 
 // Linux uses 60s for admin cmd timeout asw
 static constexpr std::chrono::seconds ADMIN_CMD_TIMEOUT{60};
+
+static constexpr std::chrono::seconds IO_CMD_TIMEOUT{30};
 }  // namespace constants
 
 // Register offsets in BAR0

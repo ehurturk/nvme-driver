@@ -147,9 +147,7 @@ static_assert(offsetof(CompletionEntry, sqid) == 10);
 static_assert(offsetof(CompletionEntry, cid) == 12);
 static_assert(offsetof(CompletionEntry, status) == 14);
 
-} // namespace nvme::wire
-
-
+}  // namespace nvme::wire
 
 namespace std {
 template<>

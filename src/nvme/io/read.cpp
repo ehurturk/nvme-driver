@@ -21,9 +21,8 @@ Read::Read(
       _nr_blocks_to_read{nr_blocks_to_read},
       _limited_retry{limited_retry},
       _force_unit_access{force_unit_access} {
-    
     auto dataset_mgmt = utils::DwordBuilder<DWRD>{};
-    
+
     dataset_mgmt.set<CDW13_DSM_INCOMPRESSABLE>(static_cast<DWRD>(management.incompressable));
     dataset_mgmt.set<CDW13_DSM_SEQ_REQ>(static_cast<DWRD>(management.seq_request));
     dataset_mgmt.set<CDW13_DSM_ACCESS_LATENCY>(static_cast<DWRD>(management.latency));
@@ -34,7 +33,7 @@ Read::Read(
 
 wire::SubmissionEntry Read::build(std::uint16_t this_cid) const noexcept {
     wire::SubmissionEntry entry = build_base(Opcode::Read, this_cid);
-    
+
     // get low bits of starting lba
     auto slba_lo = utils::extract_bits(_starting_lba, 0, 31);
     // get high bits of starting lba
@@ -42,9 +41,10 @@ wire::SubmissionEntry Read::build(std::uint16_t this_cid) const noexcept {
 
     entry.cdw10 = static_cast<std::uint32_t>(slba_lo);
     entry.cdw11 = static_cast<std::uint32_t>(slba_hi);
-    entry.cdw12 = utils::DwordBuilder<DWRD>{}.set<CDW12_LIMITED_RETRY>(static_cast<DWRD>(_limited_retry))
-                                             .set<CDW12_FORCE_UNIT_ACCESS>(static_cast<DWRD>(_force_unit_access))
-                                             .set<CDW12_NUMBER_OF_LOGICAL_BLOCKS>(static_cast<DWRD>(_nr_blocks_to_read));
+    entry.cdw12 = utils::DwordBuilder<DWRD>{}
+                      .set<CDW12_LIMITED_RETRY>(static_cast<DWRD>(_limited_retry))
+                      .set<CDW12_FORCE_UNIT_ACCESS>(static_cast<DWRD>(_force_unit_access))
+                      .set<CDW12_NUMBER_OF_LOGICAL_BLOCKS>(static_cast<DWRD>(_nr_blocks_to_read));
     entry.cdw13 = _dataset_management;
 
     entry.nsid = _nsid;

@@ -161,7 +161,7 @@ set_number_of_queues(Controller& controller, std::uint16_t nsq, std::uint16_t nc
     return allocated;
 }
 
-Result<QueuePair>
+Result<QueueId>
 create_io_queue_pair(Controller& controller, dma::DmaHeap& heap, std::uint16_t qsize) {
     if (qsize > controller.max_io_queue_entries()) {
         return std::unexpected{Error{
@@ -174,17 +174,17 @@ create_io_queue_pair(Controller& controller, dma::DmaHeap& heap, std::uint16_t q
         }};
     }
 
-    auto qid = controller.allocate_io_qid();
+    auto qid = controller.add_io_queue_pair(heap, qsize);
     if (!qid) {
         return std::unexpected{qid.error()};
     }
 
-    QueuePair pair = controller.make_io_queue_pair(*qid, heap, qsize);
+    const QueuePair* pair = controller.io_queue(*qid);
 
     auto created_cq =
-        controller.execute_admin_command(commands::CreateIoCq{pair.cq_region(), *qid, qsize});
+        controller.execute_admin_command(commands::CreateIoCq{pair->cq_region(), *qid, qsize});
     if (!created_cq || !created_cq->ok()) {
-        controller.release_io_qid(*qid);
+        controller.remove_io_queue_pair(*qid);
         if (!created_cq) {
             return std::unexpected{created_cq.error()};
         }
@@ -194,11 +194,11 @@ create_io_queue_pair(Controller& controller, dma::DmaHeap& heap, std::uint16_t q
     }
 
     auto created_sq = controller.execute_admin_command(
-        commands::CreateIoSq{pair.sq_region(), *qid, CompletionQueueId{qid->value}, qsize}
+        commands::CreateIoSq{pair->sq_region(), *qid, CompletionQueueId{qid->value}, qsize}
     );
     if (!created_sq || !created_sq->ok()) {
         auto unused = controller.execute_admin_command(commands::DeleteIoCq{*qid});
-        controller.release_io_qid(*qid);
+        controller.remove_io_queue_pair(*qid);
         if (!created_sq) {
             return std::unexpected{created_sq.error()};
         }
@@ -207,7 +207,7 @@ create_io_queue_pair(Controller& controller, dma::DmaHeap& heap, std::uint16_t q
         };
     }
 
-    return pair;
+    return *qid;
 }
 
 }  // namespace nvme::admin

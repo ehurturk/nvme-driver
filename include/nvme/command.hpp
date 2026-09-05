@@ -88,6 +88,8 @@ public:
 
     Cid cid() const;
 
+    QueueId queue_id() const;
+
     // true once the completion has been consumed into this handle
     bool done() const;
 
@@ -103,13 +105,14 @@ public:
 private:
     friend class Controller;
 
-    CommandPending(Controller& controller, Cid cid);
+    CommandPending(Controller& controller, QueueId qid, Cid cid);
 
     void release();
 
     Error empty_handle_diagnostic() const;
 
     Controller* controller_ = nullptr;
+    QueueId qid_{};
     Cid cid_{};
     std::optional<wire::CompletionEntry> completion_;
 };

@@ -20,8 +20,8 @@
 #include <format>
 #include <optional>
 #include <print>
-#include <string>
 #include <ranges>
+#include <string>
 
 namespace {
 
@@ -172,28 +172,23 @@ int main() {
             std::println("# of IOCQs allocated: {}", allocated->allocated_cq);
         }
 
-        nvme::Result<nvme::QueuePair> io_qpair =
-            na::create_io_queue_pair(controller, dma_heap, nvme::constants::IO_DEPTH);
+        nvme::Result<nvme::QueueId> io_qid = na::create_io_queue_pair(controller, dma_heap, nvme::constants::IO_DEPTH);
 
-        if (!io_qpair) {
-            std::println("[ERROR]: {}", io_qpair.error().reason);
+        if (!io_qid) {
+            std::println("[ERROR]: {}", io_qid.error().reason);
             return EXIT_FAILURE;
         }
 
-        std::println(
-            "Created IO queue pair (qid {}, cqid {})",
-            io_qpair->id().value,
-            io_qpair->id().value
-        );
+        std::println("Created IO queue pair (qid {}, cqid {})", io_qid->value, io_qid->value);
 
-        // write to namespace id 1 from starting LBA 0 of 4 LBAS 
+        // write to namespace id 1 from starting LBA 0 of 4 LBAS
         {
             dma::DmaBuffer write_buf = dma_heap.alloc(512ull * 4);
 
             // populate the write buffer
             std::array<std::byte, 2048> buf{};
             constexpr std::string_view msg = "hello nvme";
-            
+
             std::ranges::transform(msg, buf.begin(), [](char c) {
                 return static_cast<std::byte>(c);
             });
@@ -202,14 +197,19 @@ int main() {
 
             const nvme::io::commands::Write write_cmd {dma::DmaView{write_buf}, 1, 0x0, 4};
 
-            auto done = controller.execute_admin_command(write_cmd);
+            auto done = controller.execute_io_command(*io_qid, write_cmd);
             if (!done) {
                 std::println("[ERROR]: {}", done.error().reason);
                 return EXIT_FAILURE;
             }
 
             if (!done->ok()) {
-                std::println("[ERROR]: Command Error");
+                std::println("[ERROR]: Command Error: {}", done->status.succeeded());
+                std::println("[ERROR]: Command Error: {}", done->status.status_code());
+                std::println(
+                    "[ERROR]: Command Error: {}",
+                    static_cast<uint8_t>(done->status.status_code_type())
+                );
                 return EXIT_FAILURE;
             }
 
@@ -234,10 +234,10 @@ int main() {
 
         // read from namespace id 1 from starting LBA 0 and read 4 LBAs
         {
-            dma::DmaBuffer read_buf = dma_heap.alloc(512ul * 4); // read 1 LBA size
-            const nvme::io::commands::Read read_cmd {dma::DmaView{read_buf}, 1, 0x0, 4};
+            dma::DmaBuffer read_buf = dma_heap.alloc(512ul * 4);  // read 1 LBA size
+            const nvme::io::commands::Read read_cmd{dma::DmaView{read_buf}, 1, 0x0, 4};
 
-            auto done = controller.execute_admin_command(read_cmd);
+            auto done = controller.execute_io_command(*io_qid, read_cmd);
             if (!done) {
                 std::println("[ERROR]: {}", done.error().reason);
                 return EXIT_FAILURE;

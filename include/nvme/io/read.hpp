@@ -13,10 +13,22 @@ public:
     /// @param nsid: the namespace identifier to read from
     /// @param starting_lba: 64 bit address of the first logical block to be read
     /// @param nr_blocks_to_read: number of logical blocks to read, is 0s based
-    /// @param management: indicates attributes for LBAs to be read, such as access latency, access frequency and other stuff
-    /// @param limited_retry: if set to true then the controller applies limited retry efforst, if not the controller applies all recovery methods to return data to host
-    /// @param force_unit_access: if set to true then for any data the controller commits that data to non volatile media and returns the data that are read from the media with no implied ordering
-    Read(dma::DmaView read_buffer, DWRD nsid, std::uint64_t starting_lba, std::uint16_t nr_blocks_to_read, DatasetManagement management = {}, bool limited_retry = false, bool force_unit_access = false);
+    /// @param management: indicates attributes for LBAs to be read, such as access latency, access
+    /// frequency and other stuff
+    /// @param limited_retry: if set to true then the controller applies limited retry efforst, if
+    /// not the controller applies all recovery methods to return data to host
+    /// @param force_unit_access: if set to true then for any data the controller commits that data
+    /// to non volatile media and returns the data that are read from the media with no implied
+    /// ordering
+    Read(
+        dma::DmaView read_buffer,
+        DWRD nsid,
+        std::uint64_t starting_lba,
+        std::uint16_t nr_blocks_to_read,
+        DatasetManagement management = {},
+        bool limited_retry = false,
+        bool force_unit_access = false
+    );
 
     wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
 
@@ -59,13 +71,13 @@ private:
     // state:
     dma::DmaView _read_buffer; // DPTR
     DWRD _nsid;
-    std::uint64_t _starting_lba; // CDW10: bits 31:00, CDW11: bits 63:32
-    std::uint16_t _nr_blocks_to_read; // CDW12 bits 15:00
-    std::uint32_t _dataset_management; // CDW13 bits 07:00
-    bool _limited_retry; // CDW12 bit 31
-    bool _force_unit_access; // CDW12 bit 30
+    std::uint64_t _starting_lba;        // CDW10: bits 31:00, CDW11: bits 63:32
+    std::uint16_t _nr_blocks_to_read;   // CDW12 bits 15:00
+    std::uint32_t _dataset_management;  // CDW13 bits 07:00
+    bool _limited_retry;                // CDW12 bit 31
+    bool _force_unit_access;            // CDW12 bit 30
 };
 
 static_assert(CommandDescriptor<Read>);
 
-} // namespace nvme::io::commands
+}  // namespace nvme::io::commands

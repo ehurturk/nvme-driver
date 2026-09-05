@@ -11,4 +11,4 @@ enum class Opcode : std::uint8_t {
     Copy = 0x19,
 };
 
-} // namespace nvme::io
+}  // namespace nvme::io

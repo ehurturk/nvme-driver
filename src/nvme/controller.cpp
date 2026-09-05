@@ -6,11 +6,13 @@
 #include "nvme/spec.hpp"
 #include "utils.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <cstdint>
 #include <expected>
 #include <format>
+#include <memory>
 #include <optional>
 #include <print>
 #include <thread>
@@ -20,10 +22,8 @@ namespace nvme {
 
 Controller::Controller(NvmeDeviceHandle device)
     : regs_{device.bar_region()},
-      admin_queue_pair_{constants::ADMIN_QID, device.dma_heap(), regs_, constants::AQ_DEPTH},
-      timeout_{125ms},
-      admin_cid_allocator_{constants::AQ_DEPTH}  // max 32 elements could be present at a queue
-{
+      admin_queue_{constants::ADMIN_QID, device.dma_heap(), regs_, constants::AQ_DEPTH},
+      timeout_{125ms} {
     const auto vs = regs_.vs();
     const auto minor = vs::MinorVersion::extract(vs);
     const auto major = vs::MajorVersion::extract(vs);
@@ -122,8 +122,8 @@ Result<void> Controller::configure() {
     aqa_builder.set<aqa::ACQS>(static_cast<std::uint32_t>(constants::AQ_DEPTH - 1));
     regs_.aqa(aqa_builder.get());
 
-    const std::uint64_t asqb = admin_queue_pair_.sq_iova();
-    const std::uint64_t acqb = admin_queue_pair_.cq_iova();
+    const std::uint64_t asqb = admin_queue_.queues.sq_iova();
+    const std::uint64_t acqb = admin_queue_.queues.cq_iova();
 
     const std::uint64_t mps_page = std::uint64_t{1} << (12 + ccMps);
     assert(
@@ -156,8 +156,20 @@ Result<void> Controller::configure() {
     return {};
 }
 
-QueuePair& Controller::admin_queues() {
-    return admin_queue_pair_;
+const QueuePair& Controller::admin_queues() const {
+    return admin_queue_.queues;
+}
+
+const QueuePair* Controller::io_queue(QueueId qid) const {
+    const auto it = std::ranges::find_if(io_queues_, [qid](const auto& ctx) {
+        return ctx->queues.id().value == qid.value;
+    });
+
+    return it == io_queues_.end() ? nullptr : &(*it)->queues;
+}
+
+std::size_t Controller::io_queue_count() const {
+    return io_queues_.size();
 }
 
 void Controller::set_state(ControllerState state) {
@@ -170,6 +182,7 @@ const std::optional<ControllerState>& Controller::state() const {
 
 void Controller::grant_io_queues(std::uint16_t count) {
     io_qid_grant_ = count;
+    io_queues_.reserve(count);
 }
 
 Result<QueueId> Controller::allocate_io_qid() {
@@ -196,8 +209,43 @@ void Controller::release_io_qid(QueueId qid) {
     free_io_qids_.push_back(qid.value);
 }
 
-QueuePair Controller::make_io_queue_pair(QueueId qid, dma::DmaHeap& heap, std::size_t depth) {
-    return QueuePair{qid, heap, regs_, depth};
+Result<QueueId> Controller::add_io_queue_pair(dma::DmaHeap& heap, std::size_t depth) {
+    auto qid = allocate_io_qid();
+    if (!qid) {
+        return std::unexpected{qid.error()};
+    }
+
+    io_queues_.push_back(std::make_unique<QueueContext>(*qid, heap, regs_, depth));
+    return *qid;
+}
+
+void Controller::remove_io_queue_pair(QueueId qid) {
+    const auto it = std::ranges::find_if(io_queues_, [qid](const auto& ctx) {
+        return ctx->queues.id().value == qid.value;
+    });
+
+    if (it == io_queues_.end()) {
+        return;
+    }
+
+    io_queues_.erase(it);
+    release_io_qid(qid);
+}
+
+QueueContext* Controller::queue_context(QueueId qid) {
+    if (qid.value == constants::ADMIN_QID.value) {
+        return &admin_queue_;
+    }
+
+    return io_queue_context(qid);
+}
+
+QueueContext* Controller::io_queue_context(QueueId qid) {
+    const auto it = std::ranges::find_if(io_queues_, [qid](const auto& ctx) {
+        return ctx->queues.id().value == qid.value;
+    });
+
+    return it == io_queues_.end() ? nullptr : it->get();
 }
 
 std::uint32_t Controller::max_io_queue_entries() const {
@@ -208,30 +256,41 @@ bool Controller::requires_contiguous_queues() const {
     return cap::CQR::extract(regs_.cap()) == 1;
 }
 
-Result<wire::CompletionEntry> Controller::poll_admin_command(Cid cid) {
-    if (!in_flight_cmds_.contains(cid)) {
+Result<wire::CompletionEntry> Controller::poll_command(QueueId qid, Cid cid) {
+    QueueContext* ctx = queue_context(qid);
+    if (ctx == nullptr) {
+        return std::unexpected{Error{
+            .reason = std::format("Polling on queue {}, which does not exist", qid.value),
+            .severity = Error::Severity::ERROR
+        }};
+    }
+
+    if (!ctx->in_flight.contains(cid)) {
         return std::unexpected{Error{
             .reason = std::format("Polling for CID {}, which is not in flight", cid),
             .severity = Error::Severity::ERROR
         }};
     }
 
-    const auto deadline = std::chrono::steady_clock::now() + constants::ADMIN_CMD_TIMEOUT;
+    const auto timeout = qid.value == constants::ADMIN_QID.value ? constants::ADMIN_CMD_TIMEOUT
+                                                                 : constants::IO_CMD_TIMEOUT;
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
 
     while (true) {
-        if (auto done = take_completion(cid)) {
+        if (auto done = take_completion(*ctx, cid)) {
             return *done;
         }
 
-        const std::optional<wire::CompletionEntry> completion = admin_queue_pair_.cq().poll();
+        const std::optional<wire::CompletionEntry> completion = ctx->queues.cq().poll();
         if (!completion.has_value()) {
             if (std::chrono::steady_clock::now() >= deadline) {
                 // NOTE: the command is still in flight so the cid should not be released
                 return std::unexpected{Error{
                     .reason = std::format(
-                        "Timed out after {}s waiting for CID {}",
-                        constants::ADMIN_CMD_TIMEOUT.count(),
-                        cid
+                        "Timed out after {}s waiting for CID {} on queue {}",
+                        timeout.count(),
+                        cid,
+                        qid.value
                     ),
                     .severity = Error::Severity::ERROR
                 }};
@@ -241,48 +300,62 @@ Result<wire::CompletionEntry> Controller::poll_admin_command(Cid cid) {
             continue;
         }
 
-        admin_queue_pair_.sq().advance_head(completion->sq_head);
-        if (auto diag = accept_completion(*completion)) {
+        ctx->queues.sq().advance_head(completion->sq_head);
+        if (auto diag = accept_completion(*ctx, *completion)) {
             return std::unexpected{std::move(*diag)};
         }
     }
 }
 
-std::optional<Result<wire::CompletionEntry>> Controller::try_poll_admin_command(Cid cid) {
-    if (!in_flight_cmds_.contains(cid)) {
+std::optional<Result<wire::CompletionEntry>> Controller::try_poll_command(QueueId qid, Cid cid) {
+    QueueContext* ctx = queue_context(qid);
+    if (ctx == nullptr) {
+        return std::unexpected{Error{
+            .reason = std::format("Polling on queue {}, which does not exist", qid.value),
+            .severity = Error::Severity::ERROR
+        }};
+    }
+
+    if (!ctx->in_flight.contains(cid)) {
         return std::unexpected{Error{
             .reason = std::format("Polling for CID {}, which is not in flight", cid),
             .severity = Error::Severity::ERROR
         }};
     }
 
-    while (const auto completion = admin_queue_pair_.cq().poll()) {
-        admin_queue_pair_.sq().advance_head(completion->sq_head);
-        if (auto diag = accept_completion(*completion)) {
+    while (const auto completion = ctx->queues.cq().poll()) {
+        ctx->queues.sq().advance_head(completion->sq_head);
+        if (auto diag = accept_completion(*ctx, *completion)) {
             return std::unexpected{std::move(*diag)};
         }
     }
 
-    return take_completion(cid);
+    return take_completion(*ctx, cid);
 }
 
-void Controller::abandon_admin_command(Cid cid) {
-    const auto it = in_flight_cmds_.find(cid);
-    if (it == in_flight_cmds_.end()) {
+void Controller::abandon_command(QueueId qid, Cid cid) {
+    QueueContext* ctx = queue_context(qid);
+    if (ctx == nullptr) {
+        return;
+    }
+
+    const auto it = ctx->in_flight.find(cid);
+    if (it == ctx->in_flight.end()) {
         return;
     }
 
     if (it->second.result.has_value()) {
-        admin_cid_allocator_.release(it->second.cid);
-        in_flight_cmds_.erase(it);
+        ctx->cids.release(it->second.cid);
+        ctx->in_flight.erase(it);
     } else {
         it->second.abandoned = true;
     }
 }
 
-std::optional<Error> Controller::accept_completion(const wire::CompletionEntry& completion) {
-    const auto it = in_flight_cmds_.find(Cid{completion.cid});
-    if (it == in_flight_cmds_.end()) {
+std::optional<Error>
+Controller::accept_completion(QueueContext& ctx, const wire::CompletionEntry& completion) {
+    const auto it = ctx.in_flight.find(Cid{completion.cid});
+    if (it == ctx.in_flight.end()) {
         return Error{
             .reason =
                 std::format("Completion for CID {}, which was never submitted", completion.cid),
@@ -293,8 +366,8 @@ std::optional<Error> Controller::accept_completion(const wire::CompletionEntry& 
     InFlightCommand& entry = it->second;
     if (entry.abandoned) {
         // nobody is waiting on this result any more, might as well drop it and release the CID
-        admin_cid_allocator_.release(entry.cid);
-        in_flight_cmds_.erase(it);
+        ctx.cids.release(entry.cid);
+        ctx.in_flight.erase(it);
         return std::nullopt;
     }
 
@@ -313,15 +386,15 @@ std::optional<Error> Controller::accept_completion(const wire::CompletionEntry& 
     return std::nullopt;
 }
 
-std::optional<wire::CompletionEntry> Controller::take_completion(Cid cid) {
-    const auto it = in_flight_cmds_.find(cid);
-    if (it == in_flight_cmds_.end() || !it->second.result.has_value()) {
+std::optional<wire::CompletionEntry> Controller::take_completion(QueueContext& ctx, Cid cid) {
+    const auto it = ctx.in_flight.find(cid);
+    if (it == ctx.in_flight.end() || !it->second.result.has_value()) {
         return std::nullopt;
     }
 
     const wire::CompletionEntry completion = *it->second.result;
-    admin_cid_allocator_.release(it->second.cid);
-    in_flight_cmds_.erase(it);
+    ctx.cids.release(it->second.cid);
+    ctx.in_flight.erase(it);
     return completion;
 }
 
