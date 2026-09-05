@@ -5,6 +5,9 @@
 #include <cstdint>
 #include <limits>
 #include <type_traits>
+#include <span>
+#include <ranges>
+#include <print>
 
 using DWRD = std::uint32_t;
 
@@ -105,6 +108,35 @@ constexpr T extract_bits(T value, uint8_t low_bit, uint8_t high_bit) {
     T mask = (length >= (sizeof(T) * 8)) ? static_cast<T>(~0ULL) : static_cast<T>((1ULL << length) - 1);
     
     return (value >> low_bit) & mask;
+}
+
+inline void hexdump(std::span<const std::byte> buffer) {
+    size_t offset = 0;
+
+    for (auto row: buffer | std::views::chunk(16)) {
+        std::print("{:08X} ", offset);
+
+        for (std::byte b: row) {
+            std::print("{:02X} ", std::to_integer<std::uint8_t>(b));
+        }
+
+        for (size_t i = row.size(); i < 16; ++i) {
+            std::print("   ");
+        }
+        std::print(" |");
+
+        for (std::byte b : row) {
+            auto c = std::to_integer<unsigned char>(b);
+            if (c >= 32 && c <= 126) {
+                std::print("{}", static_cast<char>(c));
+            } else {
+                std::print(".");
+            }
+        }
+        std::print("|\n");
+
+        offset += row.size();
+    }
 }
 
 }  // namespace utils

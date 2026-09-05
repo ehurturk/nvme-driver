@@ -10,12 +10,13 @@ namespace nvme::io::commands {
 class Write {
 public:
     /// @param read_buffer: specifies where the data is transferred from
+    /// @param nsid: the namespace identifier to write to
     /// @param starting_lba: 64 bit address of the first logical block to be written
     /// @param nr_blocks_to_read: number of logical blocks to write, is 0s based
     /// @param management: indicates attributes for LBAs to be written, such as access latency, access frequency and other stuff
     /// @param limited_retry: if set to true then the controller applies limited retry efforst, if not the controller applies all recovery methods to write the data to NVM
     /// @param force_unit_access: if set to true then for any data the controller commits that data to non volatile media and returns the data that is written from the media with no implied ordering
-    Write(dma::DmaView read_buffer, std::uint64_t starting_lba, std::uint16_t nr_blocks_to_write, DatasetManagement management = {}, bool limited_retry = false, bool force_unit_access = false);
+    Write(dma::DmaView read_buffer, DWRD nsid, std::uint64_t starting_lba, std::uint16_t nr_blocks_to_write, DatasetManagement management = {}, bool limited_retry = false, bool force_unit_access = false);
 
     wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
 
@@ -61,6 +62,7 @@ private:
 
     // state:
     dma::DmaView _read_buffer; // DPTR
+    DWRD _nsid;
     std::uint64_t _starting_lba; // CDW10: bits 31:00, CDW11: bits 63:32
     std::uint16_t _nr_blocks_to_write; // CDW12 bits 15:00
     std::uint32_t _dataset_management; // CDW13 bits 07:00

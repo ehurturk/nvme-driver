@@ -8,6 +8,7 @@ namespace nvme::io::commands {
 
 Write::Write(
     dma::DmaView read_buffer,
+    DWRD nsid,
     std::uint64_t starting_lba,
     std::uint16_t nr_blocks_to_write,
     DatasetManagement management,
@@ -15,6 +16,7 @@ Write::Write(
     bool force_unit_access
 )
     : _read_buffer{read_buffer},
+      _nsid{nsid},
       _starting_lba{starting_lba},
       _nr_blocks_to_write{nr_blocks_to_write},
       _limited_retry{limited_retry},
@@ -44,6 +46,8 @@ wire::SubmissionEntry Write::build(std::uint16_t this_cid) const noexcept {
                                              .set<CDW12_FORCE_UNIT_ACCESS>(static_cast<DWRD>(_force_unit_access))
                                              .set<CDW12_NUMBER_OF_LOGICAL_BLOCKS>(static_cast<DWRD>(_nr_blocks_to_write));
     entry.cdw13 = _dataset_management;
+
+    entry.nsid = _nsid;
 
     return entry;
 }

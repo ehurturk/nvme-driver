@@ -1,25 +1,23 @@
 #include "nvme/queue_entry.hpp"
 
-#include "utils.hpp"
-
 #include <cstdint>
 
 namespace nvme::wire {
 
 std::uint8_t SubmissionEntry::opcode() const {
-    return static_cast<std::uint8_t>(OPC::extract(cdw0));
+    return static_cast<std::uint8_t>(CDW0_OPCODE::extract(cdw0));
 }
 
 std::uint16_t SubmissionEntry::cid() const {
-    return static_cast<std::uint16_t>(CID::extract(cdw0));
+    return static_cast<std::uint16_t>(CDW0_CID::extract(cdw0));
 }
 
 std::uint8_t SubmissionEntry::psdt() const {
-    return static_cast<std::uint8_t>(PSDT::extract(cdw0));
+    return static_cast<std::uint8_t>(CDW0_PRP_SGL_DATA_TRANSFER::extract(cdw0));
 }
 
 std::uint8_t SubmissionEntry::fuse() const {
-    return static_cast<std::uint8_t>(FUSE::extract(cdw0));
+    return static_cast<std::uint8_t>(CDW0_FUSE::extract(cdw0));
 }
 
 bool CompletionStatus::succeeded() const {

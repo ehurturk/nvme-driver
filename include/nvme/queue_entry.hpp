@@ -7,9 +7,7 @@
 #include <format>
 #include <type_traits>
 
-namespace nvme {
-
-namespace wire {
+namespace nvme::wire {
 
 struct DataPointer {
     std::uint64_t prp1;
@@ -19,6 +17,8 @@ struct DataPointer {
         return DataPointer{.prp1 = p1, .prp2 = p2};
     }
 };
+
+static_assert(sizeof(DataPointer) == 4 * sizeof(DWRD));
 
 struct SubmissionEntry {
     enum class Psdt : std::uint8_t {
@@ -40,19 +40,17 @@ struct SubmissionEntry {
     DWRD cdw14;
     DWRD cdw15;
 
+    // Command DWORD 0 accesors:
     std::uint8_t opcode() const;
-
     std::uint16_t cid() const;
-
     std::uint8_t psdt() const;
-
     std::uint8_t fuse() const;
 
 private:
-    using OPC = utils::BitField<DWRD, 0, 8>;
-    using FUSE = utils::BitField<DWRD, 8, 2>;
-    using PSDT = utils::BitField<DWRD, 14, 2>;
-    using CID = utils::BitField<DWRD, 16, 16>;
+    using CDW0_OPCODE = utils::BitField<DWRD, 0, 8>;
+    using CDW0_FUSE = utils::BitField<DWRD, 8, 2>;
+    using CDW0_PRP_SGL_DATA_TRANSFER = utils::BitField<DWRD, 14, 2>;
+    using CDW0_CID = utils::BitField<DWRD, 16, 16>;
 };
 
 // this is bits 17-31 of CDW3
@@ -149,9 +147,9 @@ static_assert(offsetof(CompletionEntry, sqid) == 10);
 static_assert(offsetof(CompletionEntry, cid) == 12);
 static_assert(offsetof(CompletionEntry, status) == 14);
 
-}  // namespace wire
+} // namespace nvme::wire
 
-}  // namespace nvme
+
 
 namespace std {
 template<>
