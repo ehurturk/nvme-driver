@@ -22,7 +22,14 @@ namespace nvme {
 
 Controller::Controller(NvmeDeviceHandle device)
     : regs_{device.bar_region()},
-      admin_queue_{constants::ADMIN_QID, device.dma_heap(), regs_, constants::AQ_DEPTH},
+      configuration_{ControllerConfiguration::select(regs_.cap(), device.dma_heap().geometry())},
+      admin_queue_{
+          constants::ADMIN_QID,
+          device.dma_heap(),
+          regs_,
+          constants::AQ_DEPTH,
+          configuration_
+      },
       timeout_{125ms} {
     const auto vs = regs_.vs();
     const auto minor = vs::MinorVersion::extract(vs);
@@ -41,6 +48,10 @@ bool Controller::enable() {
 
 bool Controller::disable() {
     return change_controller_state_to(CtlDis);
+}
+
+const ControllerConfiguration& Controller::configuration() const {
+    return configuration_;
 }
 
 Result<void> Controller::configure() {
@@ -75,7 +86,7 @@ Result<void> Controller::configure() {
     ccAms = 0;
 
     // Set CC.MPS
-    std::uint8_t ccMps{0};
+    const auto ccMps = configuration_.cc_mps;
 
     const auto capMPSMax = cap::MPSMax::extract(cap);
     const auto capMPSMin = cap::MPSMin::extract(cap);
@@ -83,16 +94,6 @@ Result<void> Controller::configure() {
 
     std::println("MPSMax: {}\nMPSMin: {}", capMPSMax, capMPSMin);
     std::println("Max Queue Entry Size (CAP.MQES): {}", capMQES);
-
-    if (ccMps < capMPSMin || ccMps > capMPSMax) {
-        ccMps = static_cast<std::uint8_t>(capMPSMin);
-        std::println(
-            "[INFO]: ccMps {} is out of bounds, setting it as "
-            "capMPSMin: {}",
-            ccMps,
-            capMPSMin
-        );
-    }
 
     // Set CC.CSS
     std::uint8_t ccCss{0};
@@ -125,13 +126,12 @@ Result<void> Controller::configure() {
     const std::uint64_t asqb = admin_queue_.queues.sq_iova();
     const std::uint64_t acqb = admin_queue_.queues.cq_iova();
 
-    const std::uint64_t mps_page = std::uint64_t{1} << (12 + ccMps);
-    assert(
-        asqb % mps_page == 0 && "ASQB shall be memory page aligned (based on the value in CC.MPS)"
-    );
-    assert(
-        acqb % mps_page == 0 && "ACQB shall be memory page aligned (based on the value in CC.MPS)"
-    );
+    if (asqb % configuration_.nvme_page_size != 0 || acqb % configuration_.nvme_page_size != 0) {
+        return std::unexpected{Error{
+            .reason = "Admin queue bases do not satisfy CC.MPS alignment",
+            .severity = Error::Severity::ERROR
+        }};
+    }
 
     regs_.asq(asqb);
     regs_.acq(acqb);
@@ -215,7 +215,7 @@ Result<QueueId> Controller::add_io_queue_pair(dma::DmaHeap& heap, std::size_t de
         return std::unexpected{qid.error()};
     }
 
-    io_queues_.push_back(std::make_unique<QueueContext>(*qid, heap, regs_, depth));
+    io_queues_.push_back(std::make_unique<QueueContext>(*qid, heap, regs_, depth, configuration_));
     return *qid;
 }
 

@@ -19,7 +19,7 @@ using IOVA = std::uint64_t;
 class DmaBuffer {
 public:
     // create and map a anon+shared host memory, and then map the UVA to an IOVA via VfioContainer
-    DmaBuffer(vfio::VfioContainer& vfio, std::size_t size);
+    DmaBuffer(vfio::VfioContainer& vfio, std::size_t size, std::size_t alignment = 1);
 
     ~DmaBuffer();
 

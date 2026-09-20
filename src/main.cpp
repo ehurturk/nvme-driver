@@ -183,7 +183,7 @@ int main() {
 
         // write to namespace id 1 from starting LBA 0 of 4 LBAS
         {
-            dma::DmaBuffer write_buf = dma_heap.alloc(512ull * 4);
+            dma::DmaBuffer write_buf = dma_heap.alloc(512ull * 4, controller.configuration().nvme_page_size);
 
             // populate the write buffer
             std::array<std::byte, 2048> buf{};
@@ -234,7 +234,7 @@ int main() {
 
         // read from namespace id 1 from starting LBA 0 and read 4 LBAs
         {
-            dma::DmaBuffer read_buf = dma_heap.alloc(512ull * 4);  // read 1 LBA size
+            dma::DmaBuffer read_buf = dma_heap.alloc(512ull * 4, controller.configuration().nvme_page_size);
             const nvme::io::commands::Read read_cmd{dma::DmaView{read_buf}, 1, 0x0, 3};
 
             auto done = controller.execute_io_command(*io_qid, read_cmd);

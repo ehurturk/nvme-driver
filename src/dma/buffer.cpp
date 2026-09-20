@@ -10,10 +10,13 @@
 
 namespace dma {
 
-DmaBuffer::DmaBuffer(vfio::VfioContainer& vfio, std::size_t size)
+DmaBuffer::DmaBuffer(vfio::VfioContainer& vfio, std::size_t size, std::size_t alignment)
     : vfio_{&vfio},
-      memory_{os::MappedMemory::anonymous(size)},
-      iova_{vfio.map_dma(memory_.data(), size)} {
+      memory_{os::MappedMemory::anonymous(
+          vfio.dma_geometry().mapping_size(size),
+          vfio.dma_geometry().allocation_alignment(alignment)
+      )},
+      iova_{vfio.map_dma(memory_.data(), memory_.size(), alignment)} {
 }
 
 DmaBuffer::~DmaBuffer() {

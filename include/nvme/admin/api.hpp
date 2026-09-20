@@ -1,12 +1,10 @@
 #pragma once
 
-#include "dma/buffer.hpp"
 #include "dma/heap.hpp"
 #include "nvme/admin/features.hpp"
 #include "nvme/admin/get_log_page.hpp"
 #include "nvme/admin/identify.hpp"
 #include "nvme/command.hpp"
-#include "nvme/queue_pair.hpp"
 
 #include <cstdint>
 #include <vector>
@@ -29,8 +27,7 @@ read_error_log(Controller& controller, dma::DmaHeap& heap, std::uint32_t max_ent
 Result<features::NumberOfQueues::Completion>
 set_number_of_queues(Controller& controller, std::uint16_t nsq, std::uint16_t ncq);
 
-// creates an io queue pair on the controller and returns the id it was given; the queue
-// pair itself is owned by the controller (see Controller::io_queue)
+// creates an io queue pair on the controller and returns the id it was given
 Result<QueueId>
 create_io_queue_pair(Controller& controller, dma::DmaHeap& heap, std::uint16_t qsize);
 

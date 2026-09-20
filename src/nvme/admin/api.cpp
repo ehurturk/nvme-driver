@@ -26,7 +26,7 @@ Error completion_error(std::string_view what, const wire::CompletionEntry& compl
 }  // namespace
 
 Result<IdentifyControllerData> identify_controller(Controller& controller, dma::DmaHeap& heap) {
-    dma::DmaBuffer buf = heap.alloc(IdentifyControllerData::SIZE);
+    dma::DmaBuffer buf = heap.alloc(IdentifyControllerData::SIZE, controller.configuration().nvme_page_size);
     const commands::IdentifyControllerType cmd{dma::DmaView{buf}};
 
     auto done = controller.execute_admin_command(cmd);
@@ -42,7 +42,7 @@ Result<IdentifyControllerData> identify_controller(Controller& controller, dma::
 
 Result<IdentifyNamespaceData>
 identify_namespace(Controller& controller, dma::DmaHeap& heap, std::uint32_t nsid) {
-    dma::DmaBuffer buf = heap.alloc(IdentifyNamespaceData::SIZE);
+    dma::DmaBuffer buf = heap.alloc(IdentifyNamespaceData::SIZE, controller.configuration().nvme_page_size);
     const commands::IdentifyNamespaceType cmd{dma::DmaView{buf}, nsid};
 
     auto done = controller.execute_admin_command(cmd);
@@ -59,7 +59,10 @@ identify_namespace(Controller& controller, dma::DmaHeap& heap, std::uint32_t nsi
 Result<std::vector<std::uint32_t>>
 list_active_namespaces(Controller& controller, dma::DmaHeap& heap) {
     std::vector<std::uint32_t> nsids;
-    dma::DmaBuffer buf = heap.alloc(IdentifyActiveNamespaceIdListData::SIZE);
+    dma::DmaBuffer buf = heap.alloc(
+        IdentifyActiveNamespaceIdListData::SIZE,
+        controller.configuration().nvme_page_size
+    );
 
     std::uint32_t cursor = 0;
     while (true) {
@@ -88,7 +91,7 @@ list_active_namespaces(Controller& controller, dma::DmaHeap& heap) {
 }
 
 Result<SmartLogData> read_smart_log(Controller& controller, dma::DmaHeap& heap) {
-    dma::DmaBuffer buf = heap.alloc(SmartLogData::SIZE);
+    dma::DmaBuffer buf = heap.alloc(SmartLogData::SIZE, controller.configuration().nvme_page_size);
 
     auto log = controller.execute_admin_command(
         commands::GetLogPage{dma::DmaView{buf}, LogPageId::SmartHealth, SmartLogData::SIZE / 4}
@@ -105,18 +108,19 @@ Result<SmartLogData> read_smart_log(Controller& controller, dma::DmaHeap& heap) 
 
 Result<std::vector<ErrorLogEntry>>
 read_error_log(Controller& controller, dma::DmaHeap& heap, std::uint32_t max_entries) {
-    if (max_entries == 0 || max_entries * ErrorLogEntry::SIZE > 4096) {
+    const auto page_size = controller.configuration().nvme_page_size;
+    if (max_entries == 0 || max_entries > page_size / ErrorLogEntry::SIZE) {
         return std::unexpected{Error{
             .reason = std::format(
                 "Error log request of {} entries exceeds the single-page (PRP1-only) limit of {}",
                 max_entries,
-                4096 / ErrorLogEntry::SIZE
+                page_size / ErrorLogEntry::SIZE
             ),
             .severity = Error::Severity::ERROR
         }};
     }
 
-    dma::DmaBuffer buf = heap.alloc(max_entries * ErrorLogEntry::SIZE);
+    dma::DmaBuffer buf = heap.alloc(max_entries * ErrorLogEntry::SIZE, page_size);
 
     auto log = controller.execute_admin_command(
         commands::GetLogPage{
@@ -181,8 +185,7 @@ create_io_queue_pair(Controller& controller, dma::DmaHeap& heap, std::uint16_t q
 
     const QueuePair* pair = controller.io_queue(*qid);
 
-    auto created_cq =
-        controller.execute_admin_command(commands::CreateIoCq{pair->cq_region(), *qid, qsize});
+    auto created_cq = controller.execute_admin_command(commands::CreateIoCq{pair->cq_region(), *qid, qsize});
     if (!created_cq || !created_cq->ok()) {
         controller.remove_io_queue_pair(*qid);
         if (!created_cq) {

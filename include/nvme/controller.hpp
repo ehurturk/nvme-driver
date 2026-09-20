@@ -4,6 +4,7 @@
 #include "../os/mmio.hpp"
 #include "cid.hpp"
 #include "nvme/command.hpp"
+#include "nvme/controller_configuration.hpp"
 #include "nvme/controller_state.hpp"
 #include "nvme/queue_entry.hpp"
 #include "queue_pair.hpp"
@@ -45,8 +46,14 @@ private:
 };
 
 struct QueueContext {
-    QueueContext(QueueId qid, dma::DmaHeap& heap, ControllerRegisters& cregs, std::size_t depth)
-        : queues{qid, heap, cregs, depth},
+    QueueContext(
+        QueueId qid,
+        dma::DmaHeap& heap,
+        ControllerRegisters& cregs,
+        std::size_t depth,
+        const ControllerConfiguration& configuration
+    )
+        : queues{qid, heap, cregs, depth, configuration},
           cids{static_cast<Cid::value_type>(std::min<std::size_t>(depth - 1, 0xFFFE))} {
     }
 
@@ -82,6 +89,8 @@ public:
     bool disable();
 
     [[nodiscard]] Result<void> configure();
+
+    const ControllerConfiguration& configuration() const;
 
     // submits an admin command and blocks until its own completion arrives
     template<CommandDescriptor Command>
@@ -232,6 +241,7 @@ private:
     bool change_controller_state_to(std::uint8_t en);
 
     ControllerRegisters regs_;
+    const ControllerConfiguration configuration_;
 
     QueueContext admin_queue_;
     std::vector<std::unique_ptr<QueueContext>> io_queues_;

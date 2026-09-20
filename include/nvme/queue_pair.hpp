@@ -4,6 +4,7 @@
 #include "dma/heap.hpp"
 #include "nvme/command.hpp"
 #include "nvme/completion_queue.hpp"
+#include "nvme/controller_configuration.hpp"
 #include "nvme/queue_entry.hpp"
 #include "nvme/registers.hpp"
 #include "nvme/submission_queue.hpp"
@@ -18,7 +19,13 @@ namespace nvme {
 
 class QueuePair {
 public:
-    QueuePair(QueueId qid, dma::DmaHeap& heap, ControllerRegisters& cregs, std::size_t depth);
+    QueuePair(
+        QueueId qid,
+        dma::DmaHeap& heap,
+        ControllerRegisters& cregs,
+        std::size_t depth,
+        const ControllerConfiguration& configuration
+    );
 
     ~QueuePair() = default;
 
@@ -40,19 +47,14 @@ public:
     CompletionQueue& cq();
 
 private:
-    static std::size_t sq_region_bytes(std::size_t depth) {
-        return utils::page_round_up(depth * sizeof(wire::SubmissionEntry));
-    }
-
-    static std::size_t cq_region_bytes(std::size_t depth) {
-        return utils::page_round_up(depth * sizeof(wire::CompletionEntry));
-    }
+    static std::size_t
+    region_bytes(std::size_t depth, std::size_t entry_size, std::size_t page_size);
 
     QueueId qid_;
-    dma::DmaBuffer memory_;
-    ControllerRegisters::Doorbells dbs_;
     std::size_t sq_region_bytes_;
     std::size_t cq_region_bytes_;
+    dma::DmaBuffer memory_;
+    ControllerRegisters::Doorbells dbs_;
     SubmissionQueue sq_;
     CompletionQueue cq_;
 };

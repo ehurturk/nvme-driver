@@ -1,13 +1,15 @@
 #pragma once
 
+#include <bit>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <type_traits>
-#include <span>
-#include <ranges>
 #include <print>
+#include <ranges>
+#include <span>
+#include <stdexcept>
+#include <type_traits>
 
 using DWRD = std::uint32_t;
 
@@ -96,10 +98,16 @@ void WriteVolatile(volatile T& reg, T value) noexcept {
     reg = value;
 }
 
-constexpr std::size_t page_round_up(std::size_t bytes) {
-    // TODO: retrieve the page size at runtime instead of hardcoding it
-    static constexpr std::size_t PGSIZE = 4096;
-    return (bytes + PGSIZE - 1) & ~(PGSIZE - 1);
+template<typename T>
+constexpr T align_up(T value, T alignment) {
+    static_assert(std::is_unsigned_v<T>);
+    if (!std::has_single_bit(alignment)) {
+        throw std::invalid_argument("Alignment must be a nonzero power of two");
+    }
+    if (value > std::numeric_limits<T>::max() - (alignment - 1)) {
+        throw std::overflow_error("Aligned size exceeds address space");
+    }
+    return (value + alignment - 1) & ~(alignment - 1);
 }
 
 template <typename T>

@@ -1,6 +1,7 @@
 #include "vfio/container.hpp"
 
 #include "os/fd.hpp"
+#include "os/mmap.hpp"
 #include "utils.hpp"
 #include "vfio/error.hpp"
 
@@ -11,6 +12,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <print>
 #include <stdexcept>
 #include <vector>
@@ -42,22 +44,27 @@ void VfioContainer::enable_type1_iommu() {
 
     check(::ioctl(fd_.get(), VFIO_SET_IOMMU, VFIO_TYPE1_IOMMU) != 0, "VFIO_SET_IOMMU Type1");
 
-    cache_iova_ranges();
+    cache_iommu_info();
     seed_iova_cursor();
     iommu_enabled_ = true;
 }
 
-std::uint64_t VfioContainer::map_dma(void* uva, std::size_t size) {
+const DmaGeometry& VfioContainer::dma_geometry() const {
     if (!iommu_enabled_) {
-        throw std::logic_error("map_dma before a group was attached and the IOMMU enabled");
+        throw std::logic_error("DMA geometry requested before enabling the IOMMU");
+    }
+    return dma_geometry_;
+}
+
+std::uint64_t VfioContainer::map_dma(void* uva, std::size_t size, std::size_t alignment) {
+    const auto& geometry = dma_geometry();
+    alignment = geometry.allocation_alignment(alignment);
+    if (uva == nullptr || size == 0 || reinterpret_cast<std::uintptr_t>(uva) % alignment != 0 ||
+        size % geometry.mapping_alignment() != 0) {
+        throw std::invalid_argument("DMA buffer does not satisfy mapping alignment");
     }
 
-    check(
-        reinterpret_cast<std::uintptr_t>(uva) % PAGE_SIZE != 0 || size % PAGE_SIZE != 0,
-        "DMA buffer not page-aligned"
-    );
-
-    const std::uint64_t iova = alloc_iova(size);
+    const std::uint64_t iova = alloc_iova(size, alignment);
 
     vfio_iommu_type1_dma_map dma_map{};
     dma_map.argsz = sizeof(dma_map);
@@ -67,6 +74,7 @@ std::uint64_t VfioContainer::map_dma(void* uva, std::size_t size) {
     dma_map.flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE;
 
     check(::ioctl(fd_.get(), VFIO_IOMMU_MAP_DMA, &dma_map) != 0, "VFIO_IOMMU_MAP_DMA");
+    iova_cursor_ = iova + size;
 
     return iova;
 }
@@ -82,11 +90,16 @@ void VfioContainer::unmap_dma(std::uint64_t iova, std::size_t size) {
     }
 }
 
-void VfioContainer::cache_iova_ranges() {
+void VfioContainer::cache_iommu_info() {
     vfio_iommu_type1_info iommu_info{};
     iommu_info.argsz = sizeof(iommu_info);
 
     check(::ioctl(fd_.get(), VFIO_IOMMU_GET_INFO, &iommu_info) != 0, "VFIO_IOMMU_GET_INFO");
+
+    if ((iommu_info.flags & VFIO_IOMMU_INFO_PGSIZES) == 0u) {
+        throw std::runtime_error("VFIO did not report IOMMU page sizes");
+    }
+    dma_geometry_ = DmaGeometry::from_page_sizes(os::host_page_size(), iommu_info.iova_pgsizes);
 
     if (!(iommu_info.flags & VFIO_IOMMU_INFO_CAPS) || iommu_info.argsz <= sizeof(iommu_info)) {
         return;
@@ -117,6 +130,9 @@ void VfioContainer::cache_iova_ranges() {
 }
 
 bool VfioContainer::iova_range_valid(std::uint64_t base, std::size_t size) const {
+    if (size == 0 || size > std::numeric_limits<std::uint64_t>::max() - base) {
+        return false;
+    }
     if (iova_ranges_.empty()) {
         return true;
     }
@@ -132,20 +148,26 @@ bool VfioContainer::iova_range_valid(std::uint64_t base, std::size_t size) const
 
 void VfioContainer::seed_iova_cursor() {
     std::uint64_t base = iova_ranges_.empty() ? std::uint64_t{0x10000} : iova_ranges_.front().first;
-    base = std::max(base, PAGE_SIZE);
-    iova_cursor_ = utils::page_round_up(base);
+    const auto alignment = static_cast<std::uint64_t>(dma_geometry_.mapping_alignment());
+    base = std::max(base, alignment);
+    iova_cursor_ = utils::align_up(base, alignment);
 }
 
-std::uint64_t VfioContainer::alloc_iova(std::size_t size) {
-    std::uint64_t iova = iova_cursor_;
+std::uint64_t VfioContainer::alloc_iova(std::size_t size, std::size_t alignment) const {
+    std::uint64_t iova = utils::align_up(iova_cursor_, static_cast<std::uint64_t>(alignment));
 
     if (!iova_range_valid(iova, size)) {
         // snap to next range that fits as it doesnt fit in this iova range
         bool placed = false;
         for (const auto& range : iova_ranges_) {
-            const std::uint64_t start =
-                utils::page_round_up(range.first < PAGE_SIZE ? PAGE_SIZE : range.first);
-            if (start >= iova && start + size - 1 <= range.last) {
+            const auto base = std::max(iova, range.first);
+            if (base > std::numeric_limits<std::uint64_t>::max() - (alignment - 1)) {
+                continue;
+            }
+            const auto start = utils::align_up(base, static_cast<std::uint64_t>(alignment));
+            if (start <= range.last && size != 0 &&
+                size <= std::numeric_limits<std::uint64_t>::max() - start &&
+                size - 1 <= range.last - start) {
                 iova = start;
                 placed = true;
                 break;
@@ -156,7 +178,6 @@ std::uint64_t VfioContainer::alloc_iova(std::size_t size) {
         }
     }
 
-    iova_cursor_ = iova + size;
     return iova;
 }
 

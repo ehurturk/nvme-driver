@@ -2,6 +2,7 @@
 
 #include "os/fd.hpp"
 #include "utils.hpp"
+#include "vfio/dma_geometry.hpp"
 #include "vfio/error.hpp"
 
 #include <fcntl.h>
@@ -35,13 +36,13 @@ public:
 
     // Create an IOMMU mapping for the given memory region.
     // NOTE: Expects that uva points to page-aligned MAP_SHARED | MAP_ANONYMOUS memory.
-    std::uint64_t map_dma(void* uva, std::size_t size);
+    std::uint64_t map_dma(void* uva, std::size_t size, std::size_t alignment = 1);
 
     void unmap_dma(std::uint64_t iova, std::size_t size);
 
-private:
-    static constexpr std::size_t PAGE_SIZE = 4096;
+    const DmaGeometry& dma_geometry() const;
 
+private:
     struct IovaRange {
         std::uint64_t first;
         std::uint64_t last;  // inclusive
@@ -49,16 +50,17 @@ private:
 
     // Note from linux/vfio.h:
     //    "Any DMA map attempt outside the valid iova range will return error."
-    void cache_iova_ranges();
+    void cache_iommu_info();
 
     bool iova_range_valid(std::uint64_t base, std::size_t size) const;
 
     void seed_iova_cursor();
 
-    std::uint64_t alloc_iova(std::size_t size);
+    std::uint64_t alloc_iova(std::size_t size, std::size_t alignment) const;
 
 private:
     os::UniqueFd fd_;
+    DmaGeometry dma_geometry_{};
     std::vector<IovaRange> iova_ranges_;
     std::uint64_t iova_cursor_ = 0x10000;
     bool iommu_enabled_ = false;
