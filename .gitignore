@@ -1,2 +1,5 @@
 todo.md
 build/
+.cache
+*.qcow2
+*.img
