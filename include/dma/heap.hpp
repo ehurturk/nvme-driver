@@ -1,7 +1,6 @@
 #pragma once
 
 #include "dma/buffer.hpp"
-#include "utils.hpp"
 
 #include <cstddef>
 

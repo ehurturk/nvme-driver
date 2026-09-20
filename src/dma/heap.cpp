@@ -1,7 +1,6 @@
 #include "dma/heap.hpp"
 
 #include "dma/buffer.hpp"
-#include "utils.hpp"
 
 #include <cstddef>
 

@@ -137,6 +137,8 @@ int main() {
 
         dma::DmaHeap dma_heap{container};
 
+        // map BAR0 region into address space of this driver's process such that we can access controller registers via MMIO
+        // 
         os::MappedMemory bar0 = device.map_region(VFIO_PCI_BAR0_REGION_INDEX);
 
         nvme::Controller controller{nvme::NvmeDeviceHandle(os::MmioRegion{bar0.data()}, dma_heap)};

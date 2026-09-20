@@ -37,8 +37,7 @@ os::MappedMemory VfioDevice::map_region(std::uint32_t index) const {
 
     check((info.flags & VFIO_REGION_INFO_FLAG_MMAP) == 0u, "device region does not support mmap");
 
-    // NOTE: this really shouldn't use MAP_ANONYMOUS as this is a file backed mmap, and the
-    // backing file of the pages are the pages of the device file.
+    // NOTE: the pages returned by mmap are file backed pages which the file is the device file
     return os::MappedMemory{
         info.size,
         PROT_READ | PROT_WRITE,
@@ -58,6 +57,8 @@ void VfioDevice::enable_bus_master() {
         "pread PCI_COMMAND"
     );
 
+    // PCI_COMMAND_MASTER: Enable bus mastering on the PCI bus
+    // PCI_COMMAND_MEMORY: Enable response in memory space (modify registers via MMIO) 
     command |= PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
 
     check(

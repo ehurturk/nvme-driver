@@ -59,6 +59,7 @@ const DmaGeometry& VfioContainer::dma_geometry() const {
 std::uint64_t VfioContainer::map_dma(void* uva, std::size_t size, std::size_t alignment) {
     const auto& geometry = dma_geometry();
     alignment = geometry.allocation_alignment(alignment);
+    
     if (uva == nullptr || size == 0 || reinterpret_cast<std::uintptr_t>(uva) % alignment != 0 ||
         size % geometry.mapping_alignment() != 0) {
         throw std::invalid_argument("DMA buffer does not satisfy mapping alignment");

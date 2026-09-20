@@ -40,3 +40,12 @@ Benchmarking:
 - Benchmark against Linux pread/write without kernel caching
 - Benchmark against SPDK
 
+## Some Diagrams to Help With the System:
+
+### Linux VFIO Setup in this project:
+
+![vfio-architecture](docs/vfio-setup.drawio.svg)
+
+### NVMe Setup in this project:
+
+TODO
