@@ -2,12 +2,11 @@
 
 #include "../dma/heap.hpp"
 #include "../os/mmio.hpp"
-#include "cid.hpp"
 #include "nvme/command.hpp"
 #include "nvme/controller_configuration.hpp"
 #include "nvme/controller_state.hpp"
 #include "nvme/queue_entry.hpp"
-#include "queue_pair.hpp"
+#include "nvme/queue.hpp"
 #include "registers.hpp"
 
 #include <algorithm>
@@ -20,7 +19,6 @@
 #include <memory>
 #include <optional>
 #include <thread>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -45,88 +43,6 @@ struct NvmeDeviceHandle {
 private:
     os::MmioRegion bar0;
     dma::DmaHeap* dma;
-};
-
-/// @brief A queue context that holds a queue pair and a CID allocator for the commands
-class QueueContext {
-public:
-    QueueContext(
-        QueueId qid,
-        dma::DmaHeap& heap,
-        ControllerRegisters& cregs,
-        std::size_t depth,
-        const ControllerConfiguration& configuration
-    )
-        : queues{qid, heap, cregs, depth, configuration},
-          cids{static_cast<Cid::value_type>(std::min<std::size_t>(depth - 1, 0xFFFE))} {
-    }
-
-    ~QueueContext() = default;
-
-    QueueContext(const QueueContext&) = delete;
-    QueueContext& operator=(const QueueContext&) = delete;
-    QueueContext(QueueContext&&) = delete;
-    QueueContext& operator=(QueueContext&&) = delete;
-
-    bool full() const;
-    QueueId queue_id() const;
-
-    std::optional<Cid> allocate_cid();
-
-    template<CommandDescriptor Command>
-    Result<CommandPending<Command>> submit_command(Command command) {
-        if (full()) {
-            return std::unexpected{Error{
-                .reason = std::format("Submission queue {} is full", queue_id().value),
-                .severity = Error::Severity::ERROR
-            }};
-        }
-
-        // SQ slots free up as soon as the CQ is drained, but a CID stays held until its
-        // CommandPending takes the result, so CIDs can run out while the SQ has room
-        const std::optional<Cid> allocated = allocate_cid();
-        if (!allocated) {
-            return std::unexpected{Error{
-                .reason = std::format(
-                    "No free command identifiers on queue {} (all held by pending commands)",
-                    queue_id().value
-                ),
-                .severity = Error::Severity::ERROR
-            }};
-        }
-        const Cid cmd_id = *allocated;
-
-        wire::SubmissionEntry cmd = command.build(cmd_id.value);
-
-        auto [it, inserted] =
-            in_flight.try_emplace(cmd_id, InFlightCommand{.cid = cmd_id, .result = std::nullopt, .cmd = cmd});
-
-        if (!inserted) {
-            // we have a problem: we submit a command but now we got it again?
-            return std::unexpected{
-                Error{.reason = "Encountered an already submitted CID", .severity = Error::Severity::ERROR}
-            };
-        }
-
-        if (!push_command(cmd)) {
-            in_flight.erase(it);
-            cids.release(cmd_id);
-            return std::unexpected{Error{
-                .reason = std::format("Submission queue {} rejected the command", queue_id().value),
-                .severity = Error::Severity::ERROR
-            }};
-        }
-
-        return CommandPending<Command>{*this, queue_id(), cmd_id};
-    }
-
-private:
-    bool push_command(const wire::SubmissionEntry& command);
-
-    QueuePair queues;
-    CidAllocator cids;
-
-    std::unordered_map<Cid, InFlightCommand> in_flight;
 };
 
 /// @brief NVMe controller class that is used to interface with the NVMe device controller
@@ -167,7 +83,7 @@ public:
     // pushes the command into the admin SQ and returns a CommandPending handle tied to this command's type
     template<CommandDescriptor Command>
     Result<CommandPending<Command>> submit_admin_command(Command command) {
-        return admin_queue_.submit_command(std::move(command));
+        return submit_to(constants::ADMIN_QID, std::move(command));
     }
 
     // submits an io command to the queue pair qid and blocks until its own completion arrives
@@ -183,19 +99,18 @@ public:
 
     template<CommandDescriptor Command>
     Result<CommandPending<Command>> submit_io_command(QueueId qid, Command command) {
-        QueueContext* ctx = io_queue_context(qid);
-        if (ctx == nullptr) {
+        if (io_queue(qid) == nullptr) {
             return std::unexpected{Error{
                 .reason = std::format("IO queue {} does not exist on this controller", qid.value),
                 .severity = Error::Severity::ERROR
             }};
         }
 
-        return ctx->submit_command(std::move(command));
+        return submit_to(qid, std::move(command));
     }
 
-    const QueuePair& admin_queues() const;
-    const QueuePair* io_queue(QueueId qid) const;
+    const Queue& admin_queue() const;
+    const Queue* io_queue(QueueId qid) const;
 
     std::size_t io_queue_count() const;
     std::uint32_t max_io_queue_entries() const;
@@ -219,12 +134,16 @@ private:
     template<CommandDescriptor Command>
     friend class CommandPending;
 
+    template<CommandDescriptor Command>
+    Result<CommandPending<Command>> submit_to(QueueId qid, const Command& command) {
+        return queue(qid)->submit(command).transform([&](Cid cid) {
+            return CommandPending<Command>{*this, qid, cid};
+        });
+    }
+
     Result<QueueId> allocate_io_qid();
 
-    void release_io_qid(QueueId qid);
-
-    QueueContext* queue_context(QueueId qid);
-    QueueContext* io_queue_context(QueueId qid);
+    Queue* queue(QueueId qid);
 
     // blockingly polls the CQ until the completion for cid arrives or the timeout expires
     Result<wire::CompletionEntry> poll_command(QueueId qid, Cid cid);
@@ -233,12 +152,6 @@ private:
     std::optional<Result<wire::CompletionEntry>> try_poll_command(QueueId qid, Cid cid);
 
     void abandon_command(QueueId qid, Cid cid);
-
-    // mark completion's cid as completed and write its result to in flight command map
-    std::optional<Error> accept_completion(QueueContext& ctx, const wire::CompletionEntry& completion);
-
-    // return the completion queue entry for a given cid and release that cid
-    std::optional<wire::CompletionEntry> take_completion(QueueContext& ctx, Cid cid);
 
     bool wait_for(std::predicate auto&& predicate, std::chrono::milliseconds timeout) {
         auto deadline = std::chrono::steady_clock::now() + timeout;
@@ -264,8 +177,7 @@ private:
     ControllerRegisters regs_;
     const ControllerConfiguration configuration_;
 
-    QueueContext admin_queue_;
-    std::vector<std::unique_ptr<QueueContext>> io_queues_;
+    std::vector<std::unique_ptr<Queue>> queues_;
 
     std::chrono::milliseconds timeout_;
 
@@ -273,8 +185,6 @@ private:
 
     // qid management state
     std::uint16_t io_qid_grant_{0};
-    std::uint16_t next_io_qid_{1};
-    std::vector<std::uint16_t> free_io_qids_;
 };
 
 template<CommandDescriptor Command>

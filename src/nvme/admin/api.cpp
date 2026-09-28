@@ -177,7 +177,7 @@ Result<QueueId> create_io_queue_pair(Controller& controller, dma::DmaHeap& heap,
         return std::unexpected{qid.error()};
     }
 
-    const QueuePair* pair = controller.io_queue(*qid);
+    const Queue* pair = controller.io_queue(*qid);
 
     // Create IO CQ
     auto cq_ready =

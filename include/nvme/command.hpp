@@ -53,14 +53,6 @@ concept CommandDescriptor = requires(const C c, std::uint16_t cid, const wire::C
     { C::decode_completion(e) } -> std::same_as<typename C::Completion>;
 };
 
-struct InFlightCommand {
-    Cid cid{0};
-    std::optional<wire::CompletionEntry> result{std::nullopt};
-    wire::SubmissionEntry cmd{};
-
-    bool abandoned = false;
-};
-
 struct Error {
     enum class Severity : std::uint8_t {
         INFO,
