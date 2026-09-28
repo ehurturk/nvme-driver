@@ -48,6 +48,7 @@ public:
     dma::DmaView sq_region() const;
     dma::DmaView cq_region() const;
 
+    /// @brief Allocates a CID for the given command and pushes the built SubmissionEntry to the submission queue
     template<CommandDescriptor Command>
     Result<Cid> submit(const Command& command) {
         if (sq_.full()) {
@@ -62,10 +63,8 @@ public:
         const std::optional<Cid> allocated = requests_.acquire();
         if (!allocated) {
             return std::unexpected{Error{
-                .reason = std::format(
-                    "No free command identifiers on queue {} (all held by pending commands)",
-                    qid_.value
-                ),
+                .reason =
+                    std::format("No free command identifiers on queue {} (all held by pending commands)", qid_.value),
                 .severity = Error::Severity::ERROR
             }};
         }
@@ -82,18 +81,21 @@ public:
         return cmd_id;
     }
 
+    /// @brief Wait until the given CID command is completed and placed in the completion queue. Waiting more than the
+    /// timeout will result in an Error without an empty completion entry returned
     Result<wire::CompletionEntry> wait(Cid cid);
 
+    /// @brief Polls the completion queue until it finds the command CID. If it finds any existing completed commands
+    /// along the way, marks them as completed as well, so performs a sweep poll
     std::optional<Result<wire::CompletionEntry>> poll(Cid cid);
 
+    /// @brief Discards the given CID
     void abandon(Cid cid);
 
 private:
     static std::size_t region_bytes(std::size_t depth, std::size_t entry_size, std::size_t page_size);
 
-    std::optional<Error> reap(const wire::CompletionEntry& completion);
-
-    Error not_in_flight(Cid cid) const;
+    std::optional<Error> write_complete(const wire::CompletionEntry& completion);
 
     QueueId qid_;
     std::size_t sq_region_bytes_;

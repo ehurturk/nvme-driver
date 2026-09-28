@@ -1,7 +1,7 @@
 #include "nvme/controller.hpp"
 
-#include "nvme/queue_entry.hpp"
 #include "nvme/queue.hpp"
+#include "nvme/queue_entry.hpp"
 #include "nvme/spec.hpp"
 #include "utils.hpp"
 
@@ -15,7 +15,6 @@
 #include <optional>
 #include <print>
 #include <ranges>
-#include <thread>
 #include <utility>
 
 namespace nvme {
@@ -55,10 +54,9 @@ Result<void> Controller::configure() {
     fetch_timeout();
 
     if (!disable()) {
-        return std::unexpected{Error{
-            .reason = "Controller did not become disabled within CAP.TO",
-            .severity = Error::Severity::ERROR
-        }};
+        return std::unexpected{
+            Error{.reason = "Controller did not become disabled within CAP.TO", .severity = Error::Severity::ERROR}
+        };
     }
 
     const std::uint64_t cap = regs_.cap();
@@ -108,8 +106,7 @@ Result<void> Controller::configure() {
         ccCss = cc::css::NOIOCSS;
     } else {
         return std::unexpected{Error{
-            .reason =
-                std::format("Controller supports no usable command set (CAP.CSS = {:#x})", capCss),
+            .reason = std::format("Controller supports no usable command set (CAP.CSS = {:#x})", capCss),
             .severity = Error::Severity::ERROR
         }};
     }
@@ -124,10 +121,9 @@ Result<void> Controller::configure() {
     const std::uint64_t acqb = admin_queue().cq_iova();
 
     if (asqb % configuration_.nvme_page_size != 0 || acqb % configuration_.nvme_page_size != 0) {
-        return std::unexpected{Error{
-            .reason = "Admin queue bases do not satisfy CC.MPS alignment",
-            .severity = Error::Severity::ERROR
-        }};
+        return std::unexpected{
+            Error{.reason = "Admin queue bases do not satisfy CC.MPS alignment", .severity = Error::Severity::ERROR}
+        };
     }
 
     regs_.asq(asqb);
@@ -194,22 +190,17 @@ Result<QueueId> Controller::allocate_io_qid() {
     }
 
     return std::unexpected{Error{
-        .reason = std::format(
-            "No IO queue IDs available ({} allowed max via Set Features Number of Queues)",
-            io_qid_grant_
-        ),
+        .reason =
+            std::format("No IO queue IDs available ({} allowed max via Set Features Number of Queues)", io_qid_grant_),
         .severity = Error::Severity::ERROR
     }};
 }
 
 Result<QueueId> Controller::add_io_queue_pair(dma::DmaHeap& heap, std::size_t depth) {
-    auto qid = allocate_io_qid();
-    if (!qid) {
-        return std::unexpected{qid.error()};
-    }
-
-    queues_[qid->value] = std::make_unique<Queue>(*qid, heap, regs_, depth, configuration_);
-    return *qid;
+    return allocate_io_qid().and_then([&](const QueueId& id) -> Result<QueueId> {
+        queues_[id.value] = std::make_unique<Queue>(id, heap, regs_, depth, configuration_);
+        return id;
+    });
 }
 
 void Controller::remove_io_queue_pair(QueueId qid) {

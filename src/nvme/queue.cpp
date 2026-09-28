@@ -12,6 +12,15 @@
 #include <stdexcept>
 #include <thread>
 
+namespace {
+nvme::Error not_in_flight(nvme::Cid cid) {
+    return nvme::Error{
+        .reason = std::format("Polling for CID {}, which is not in flight", cid),
+        .severity = nvme::Error::Severity::ERROR
+    };
+}
+}  // namespace
+
 namespace nvme {
 
 std::size_t Queue::region_bytes(std::size_t depth, std::size_t entry_size, std::size_t page_size) {
@@ -90,11 +99,11 @@ Result<wire::CompletionEntry> Queue::wait(Cid cid) {
                 }};
             }
 
-            std::this_thread::yield();
+            std::this_thread::yield();  // TODO: __mm_pause()?
             continue;
         }
 
-        if (auto diag = reap(*completion)) {
+        if (auto diag = write_complete(*completion)) {
             return std::unexpected{std::move(*diag)};
         }
     }
@@ -106,7 +115,7 @@ std::optional<Result<wire::CompletionEntry>> Queue::poll(Cid cid) {
     }
 
     while (const auto completion = cq_.poll()) {
-        if (auto diag = reap(*completion)) {
+        if (auto diag = write_complete(*completion)) {
             return std::unexpected{std::move(*diag)};
         }
     }
@@ -118,16 +127,9 @@ void Queue::abandon(Cid cid) {
     requests_.abandon(cid);
 }
 
-std::optional<Error> Queue::reap(const wire::CompletionEntry& completion) {
+std::optional<Error> Queue::write_complete(const wire::CompletionEntry& completion) {
     sq_.advance_head(completion.sq_head);
     return requests_.complete(completion);
-}
-
-Error Queue::not_in_flight(Cid cid) const {
-    return Error{
-        .reason = std::format("Polling for CID {}, which is not in flight", cid),
-        .severity = Error::Severity::ERROR
-    };
 }
 
 }  // namespace nvme
