@@ -5,8 +5,8 @@
 #include "nvme/command.hpp"
 #include "nvme/controller_configuration.hpp"
 #include "nvme/controller_state.hpp"
-#include "nvme/queue_entry.hpp"
 #include "nvme/queue.hpp"
+#include "nvme/queue_entry.hpp"
 #include "registers.hpp"
 
 #include <algorithm>
@@ -174,6 +174,9 @@ private:
     // en = 0b1 -> enable
     bool change_controller_state_to(std::uint8_t en);
 
+    //
+    // Internal state
+    //
     ControllerRegisters regs_;
     const ControllerConfiguration configuration_;
 
@@ -183,7 +186,6 @@ private:
 
     std::optional<ControllerState> state_;
 
-    // qid management state
     std::uint16_t io_qid_grant_{0};
 };
 

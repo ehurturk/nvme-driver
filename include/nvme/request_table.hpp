@@ -13,6 +13,7 @@ namespace nvme {
 class RequestTable {
 public:
     explicit RequestTable(Cid::value_type capacity);
+    ~RequestTable() = default;
 
     RequestTable(const RequestTable&) = delete;
     RequestTable& operator=(const RequestTable&) = delete;
