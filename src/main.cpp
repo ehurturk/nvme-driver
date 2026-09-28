@@ -5,7 +5,6 @@
 #include "nvme/controller_state.hpp"
 #include "nvme/io/read.hpp"
 #include "nvme/io/write.hpp"
-#include "nvme/queue_pair.hpp"
 #include "nvme/spec.hpp"
 #include "os/mmio.hpp"
 #include "vfio/container.hpp"
@@ -20,7 +19,6 @@
 #include <format>
 #include <optional>
 #include <print>
-#include <ranges>
 #include <string>
 
 namespace {
@@ -137,8 +135,7 @@ int main() {
 
         dma::DmaHeap dma_heap{container};
 
-        // map BAR0 region into address space of this driver's process such that we can access controller registers via MMIO
-        // 
+        // map BAR0 into address space of this driver's process so that we can access controller registers via MMIO
         os::MappedMemory bar0 = device.map_region(VFIO_PCI_BAR0_REGION_INDEX);
 
         nvme::Controller controller{nvme::NvmeDeviceHandle(os::MmioRegion{bar0.data()}, dma_heap)};
@@ -159,11 +156,7 @@ int main() {
         execute_read_logs_command(controller, dma_heap);
 
         {
-            auto allocated = na::set_number_of_queues(
-                controller,
-                nvme::constants::NR_IO_SQ,
-                nvme::constants::NR_IO_CQ
-            );
+            auto allocated = na::set_number_of_queues(controller, nvme::constants::NR_IO_SQ, nvme::constants::NR_IO_CQ);
 
             if (!allocated) {
                 std::println("[ERROR]: {}", allocated.error().reason);
@@ -197,7 +190,7 @@ int main() {
 
             std::memcpy(write_buf.uva(), buf.data(), buf.size());
 
-            const nvme::io::commands::Write write_cmd {dma::DmaView{write_buf}, 1, 0x0, 3};
+            const nvme::io::commands::Write write_cmd{dma::DmaView{write_buf}, 1, 0x0, 3};
 
             auto done = controller.execute_io_command(*io_qid, write_cmd);
             if (!done) {
@@ -208,10 +201,7 @@ int main() {
             if (!done->ok()) {
                 std::println("[ERROR]: Command Error: {}", done->status.succeeded());
                 std::println("[ERROR]: Command Error: {}", done->status.status_code());
-                std::println(
-                    "[ERROR]: Command Error: {}",
-                    static_cast<uint8_t>(done->status.status_code_type())
-                );
+                std::println("[ERROR]: Command Error: {}", static_cast<uint8_t>(done->status.status_code_type()));
                 return EXIT_FAILURE;
             }
 

@@ -21,11 +21,7 @@ public:
     static_assert(std::is_trivially_copyable_v<Entry>);
     static_assert(std::is_standard_layout_v<Entry>);
 
-    SubmissionQueue(
-        dma::DmaView dma_region,
-        volatile std::uint32_t* tail_doorbell,
-        std::size_t depth
-    )
+    SubmissionQueue(dma::DmaView dma_region, volatile std::uint32_t* tail_doorbell, std::size_t depth)
         : dma_region_{dma_region}, doorbell_{tail_doorbell}, depth_{depth} {
         assert(std::has_single_bit(depth_) && "Queue size must be a power of 2.");
         assert(depth_ >= constants::MIN_QUEUE_DEPTH);
@@ -50,6 +46,8 @@ public:
         }
 
         // copy entry
+        // TODO: use std::uninitialized_copy/move based on value category such that we can
+        //       prevent a copy in rvalue temporaries
         auto* dst = dma_region_.uva + (tail_ * sizeof(Entry));
         std::memcpy(dst, &e, sizeof(Entry));
 

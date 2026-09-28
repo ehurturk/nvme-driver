@@ -18,12 +18,10 @@ CidAllocator::CidAllocator(Cid::value_type capacity) : capacity_{capacity} {
     }
 }
 
-CidAllocator::~CidAllocator() {
-    assert(free_.size() == capacity_ && "A CID has outlived its allocator");
-}
-
-Cid CidAllocator::allocate() {
-    assert(!free_.empty() && "No available CIDs");
+std::optional<Cid> CidAllocator::allocate() {
+    if (free_.empty()) {
+        return std::nullopt;
+    }
 
     const auto cid = free_.back();
     free_.pop_back();

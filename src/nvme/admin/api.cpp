@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <expected>
 #include <format>
+#include <string>
 #include <string_view>
 
 namespace nvme::admin {
@@ -40,8 +41,7 @@ Result<IdentifyControllerData> identify_controller(Controller& controller, dma::
     return cmd.data();
 }
 
-Result<IdentifyNamespaceData>
-identify_namespace(Controller& controller, dma::DmaHeap& heap, std::uint32_t nsid) {
+Result<IdentifyNamespaceData> identify_namespace(Controller& controller, dma::DmaHeap& heap, std::uint32_t nsid) {
     dma::DmaBuffer buf = heap.alloc(IdentifyNamespaceData::SIZE, controller.configuration().nvme_page_size);
     const commands::IdentifyNamespaceType cmd{dma::DmaView{buf}, nsid};
 
@@ -56,13 +56,9 @@ identify_namespace(Controller& controller, dma::DmaHeap& heap, std::uint32_t nsi
     return cmd.data();
 }
 
-Result<std::vector<std::uint32_t>>
-list_active_namespaces(Controller& controller, dma::DmaHeap& heap) {
+Result<std::vector<std::uint32_t>> list_active_namespaces(Controller& controller, dma::DmaHeap& heap) {
     std::vector<std::uint32_t> nsids;
-    dma::DmaBuffer buf = heap.alloc(
-        IdentifyActiveNamespaceIdListData::SIZE,
-        controller.configuration().nvme_page_size
-    );
+    dma::DmaBuffer buf = heap.alloc(IdentifyActiveNamespaceIdListData::SIZE, controller.configuration().nvme_page_size);
 
     std::uint32_t cursor = 0;
     while (true) {
@@ -151,8 +147,7 @@ Result<features::NumberOfQueues::Completion>
 set_number_of_queues(Controller& controller, std::uint16_t nsq, std::uint16_t ncq) {
     using SetNumberOfQueues = commands::SetFeatures<features::NumberOfQueues>;
 
-    auto submitted =
-        controller.submit_admin_command(SetNumberOfQueues{features::NumberOfQueues{nsq, ncq}});
+    auto submitted = controller.submit_admin_command(SetNumberOfQueues{features::NumberOfQueues{nsq, ncq}});
     if (!submitted) {
         return std::unexpected{submitted.error()};
     }
@@ -165,8 +160,7 @@ set_number_of_queues(Controller& controller, std::uint16_t nsq, std::uint16_t nc
     return allocated;
 }
 
-Result<QueueId>
-create_io_queue_pair(Controller& controller, dma::DmaHeap& heap, std::uint16_t qsize) {
+Result<QueueId> create_io_queue_pair(Controller& controller, dma::DmaHeap& heap, std::uint16_t qsize) {
     if (qsize > controller.max_io_queue_entries()) {
         return std::unexpected{Error{
             .reason = std::format(
@@ -185,29 +179,48 @@ create_io_queue_pair(Controller& controller, dma::DmaHeap& heap, std::uint16_t q
 
     const QueuePair* pair = controller.io_queue(*qid);
 
-    auto created_cq = controller.execute_admin_command(commands::CreateIoCq{pair->cq_region(), *qid, qsize});
-    if (!created_cq || !created_cq->ok()) {
-        controller.remove_io_queue_pair(*qid);
-        if (!created_cq) {
-            return std::unexpected{created_cq.error()};
-        }
-        return std::unexpected{
-            completion_error(std::format("Create IO CQ {}", qid->value), *created_cq)
-        };
+    // Create IO CQ
+    auto cq_ready =
+        controller.execute_admin_command(commands::CreateIoCq{pair->cq_region(), *qid, qsize})
+            .and_then([&](const auto& completion) -> Result<wire::SubmissionEntry> {
+                if (completion.ok()) {
+                    return {};
+                }
+
+                controller.remove_io_queue_pair(*qid);
+                return std::unexpected{completion_error(std::format("Create IO CQ {}", qid->value), completion)};
+            });
+
+    if (!cq_ready) {
+        return std::unexpected{cq_ready.error()};
     }
 
     auto created_sq = controller.execute_admin_command(
         commands::CreateIoSq{pair->sq_region(), *qid, CompletionQueueId{qid->value}, qsize}
     );
-    if (!created_sq || !created_sq->ok()) {
-        auto unused = controller.execute_admin_command(commands::DeleteIoCq{*qid});
-        controller.remove_io_queue_pair(*qid);
-        if (!created_sq) {
-            return std::unexpected{created_sq.error()};
+
+    if (!created_sq) {
+        return std::unexpected{created_sq.error()};
+    }
+
+    if (!created_sq->ok()) {
+        const Error sq_error = completion_error(std::format("Create IO SQ {}", qid->value), *created_sq);
+
+        auto deleted_cq = controller.execute_admin_command(commands::DeleteIoCq{*qid});
+        if (!deleted_cq || !deleted_cq->ok()) {
+            // the CQ is still live on the device, so its memory must stay mapped
+            const std::string why =
+                deleted_cq ? completion_error(std::format("Delete IO CQ {}", qid->value), *deleted_cq).reason
+                           : deleted_cq.error().reason;
+            return std::unexpected{Error{
+                .reason =
+                    std::format("{}, cleanup failed. IO CQ {} left allocated: {}", sq_error.reason, qid->value, why),
+                .severity = Error::Severity::ERROR
+            }};
         }
-        return std::unexpected{
-            completion_error(std::format("Create IO SQ {}", qid->value), *created_sq)
-        };
+
+        controller.remove_io_queue_pair(*qid);
+        return std::unexpected{sq_error};
     }
 
     return *qid;

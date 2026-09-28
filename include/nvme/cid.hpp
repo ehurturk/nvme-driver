@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <format>
 #include <functional>
+#include <optional>
 #include <vector>
 
 namespace nvme {
@@ -19,7 +20,7 @@ class CidAllocator {
 public:
     explicit CidAllocator(Cid::value_type capacity);
 
-    ~CidAllocator();
+    ~CidAllocator() = default;
 
     // pin the allocator such that any CIDs produced by this allocator are pinned to this allocator
     CidAllocator(const CidAllocator&) = delete;
@@ -27,13 +28,14 @@ public:
     CidAllocator(CidAllocator&&) = delete;
     CidAllocator& operator=(CidAllocator&&) = delete;
 
-    Cid allocate();
+    /// @brief An allocation may fail due to all CIDs being allocated
+    std::optional<Cid> allocate();
 
+    /// @brief Release an allocated CID for it to be reused
     void release(Cid cid) noexcept;
 
 private:
-    std::vector<Cid::value_type>
-        free_;  // FIXME: surely there is a better and more memory efficient way?
+    std::vector<Cid::value_type> free_;  // FIXME: surely there is a better and more memory efficient way?
     std::uint16_t capacity_;
 };
 

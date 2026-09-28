@@ -52,10 +52,6 @@ bool CompletionStatus::more() const {
     return static_cast<bool>(M::extract(status));
 }
 
-CompletionStatus::operator int() const noexcept {
-    return status;
-}
-
 bool CompletionEntry::ok() const {
     return status.succeeded();
 }

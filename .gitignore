@@ -3,3 +3,4 @@ build/
 .cache
 *.qcow2
 *.img
+out/

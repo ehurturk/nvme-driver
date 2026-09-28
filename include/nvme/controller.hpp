@@ -28,8 +28,9 @@ namespace nvme {
 
 using namespace std::chrono_literals;
 
+/// @brief A lightweight NVME device handle that contains the BAR0 region
 struct NvmeDeviceHandle {
-    NvmeDeviceHandle(os::MmioRegion bar0, dma::DmaHeap& dma) : bar0{bar0}, dma{dma} {
+    NvmeDeviceHandle(os::MmioRegion bar0, dma::DmaHeap& dma) : bar0{bar0}, dma{&dma} {
     }
 
     os::MmioRegion bar_region() const {
@@ -37,15 +38,18 @@ struct NvmeDeviceHandle {
     }
 
     dma::DmaHeap& dma_heap() const {
-        return dma;
+        assert(dma != nullptr);
+        return *dma;
     }
 
 private:
     os::MmioRegion bar0;
-    dma::DmaHeap& dma;
+    dma::DmaHeap* dma;
 };
 
-struct QueueContext {
+/// @brief A queue context that holds a queue pair and a CID allocator for the commands
+class QueueContext {
+public:
     QueueContext(
         QueueId qid,
         dma::DmaHeap& heap,
@@ -64,12 +68,69 @@ struct QueueContext {
     QueueContext(QueueContext&&) = delete;
     QueueContext& operator=(QueueContext&&) = delete;
 
+    bool full() const;
+    QueueId queue_id() const;
+
+    std::optional<Cid> allocate_cid();
+
+    template<CommandDescriptor Command>
+    Result<CommandPending<Command>> submit_command(Command command) {
+        if (full()) {
+            return std::unexpected{Error{
+                .reason = std::format("Submission queue {} is full", queue_id().value),
+                .severity = Error::Severity::ERROR
+            }};
+        }
+
+        // SQ slots free up as soon as the CQ is drained, but a CID stays held until its
+        // CommandPending takes the result, so CIDs can run out while the SQ has room
+        const std::optional<Cid> allocated = allocate_cid();
+        if (!allocated) {
+            return std::unexpected{Error{
+                .reason = std::format(
+                    "No free command identifiers on queue {} (all held by pending commands)",
+                    queue_id().value
+                ),
+                .severity = Error::Severity::ERROR
+            }};
+        }
+        const Cid cmd_id = *allocated;
+
+        wire::SubmissionEntry cmd = command.build(cmd_id.value);
+
+        auto [it, inserted] =
+            in_flight.try_emplace(cmd_id, InFlightCommand{.cid = cmd_id, .result = std::nullopt, .cmd = cmd});
+
+        if (!inserted) {
+            // we have a problem: we submit a command but now we got it again?
+            return std::unexpected{
+                Error{.reason = "Encountered an already submitted CID", .severity = Error::Severity::ERROR}
+            };
+        }
+
+        if (!push_command(cmd)) {
+            in_flight.erase(it);
+            cids.release(cmd_id);
+            return std::unexpected{Error{
+                .reason = std::format("Submission queue {} rejected the command", queue_id().value),
+                .severity = Error::Severity::ERROR
+            }};
+        }
+
+        return CommandPending<Command>{*this, queue_id(), cmd_id};
+    }
+
+private:
+    bool push_command(const wire::SubmissionEntry& command);
+
     QueuePair queues;
     CidAllocator cids;
+
     std::unordered_map<Cid, InFlightCommand> in_flight;
 };
 
-class Controller final {
+/// @brief NVMe controller class that is used to interface with the NVMe device controller
+class Controller {
 private:
     static constexpr std::uint8_t CtlEn = 0b1;
     static constexpr std::uint8_t CtlDis = 0b0;
@@ -106,7 +167,7 @@ public:
     // pushes the command into the admin SQ and returns a CommandPending handle tied to this command's type
     template<CommandDescriptor Command>
     Result<CommandPending<Command>> submit_admin_command(Command command) {
-        return submit_to(admin_queue_, std::move(command));
+        return admin_queue_.submit_command(std::move(command));
     }
 
     // submits an io command to the queue pair qid and blocks until its own completion arrives
@@ -130,7 +191,7 @@ public:
             }};
         }
 
-        return submit_to(*ctx, std::move(command));
+        return ctx->submit_command(std::move(command));
     }
 
     const QueuePair& admin_queues() const;
@@ -158,49 +219,10 @@ private:
     template<CommandDescriptor Command>
     friend class CommandPending;
 
-    template<CommandDescriptor Command>
-    Result<CommandPending<Command>> submit_to(QueueContext& ctx, Command command) {
-        if (ctx.queues.sq().full()) {
-            return std::unexpected{Error{
-                .reason = std::format("Submission queue {} is full", ctx.queues.id().value),
-                .severity = Error::Severity::ERROR
-            }};
-        }
-
-        Cid cmd_id = ctx.cids.allocate();
-
-        wire::SubmissionEntry cmd = command.build(cmd_id.value);
-
-        auto [it, inserted] = ctx.in_flight.try_emplace(
-            cmd_id,
-            InFlightCommand{.cid = cmd_id, .result = std::nullopt, .cmd = cmd}
-        );
-
-        if (!inserted) {
-            // we have a problem: we submit a command but now we got it again?
-            return std::unexpected{Error{
-                .reason = "Encountered an already submitted CID",
-                .severity = Error::Severity::ERROR
-            }};
-        }
-
-        if (!ctx.queues.sq().push(cmd)) {  // copies the command into the submission queue's ring
-            ctx.in_flight.erase(it);
-            ctx.cids.release(cmd_id);
-            return std::unexpected{Error{
-                .reason =
-                    std::format("Submission queue {} rejected the command", ctx.queues.id().value),
-                .severity = Error::Severity::ERROR
-            }};
-        }
-
-        return CommandPending<Command>{*this, ctx.queues.id(), cmd_id};
-    }
-
     Result<QueueId> allocate_io_qid();
 
     void release_io_qid(QueueId qid);
- 
+
     QueueContext* queue_context(QueueId qid);
     QueueContext* io_queue_context(QueueId qid);
 
@@ -213,8 +235,7 @@ private:
     void abandon_command(QueueId qid, Cid cid);
 
     // mark completion's cid as completed and write its result to in flight command map
-    std::optional<Error>
-    accept_completion(QueueContext& ctx, const wire::CompletionEntry& completion);
+    std::optional<Error> accept_completion(QueueContext& ctx, const wire::CompletionEntry& completion);
 
     // return the completion queue entry for a given cid and release that cid
     std::optional<wire::CompletionEntry> take_completion(QueueContext& ctx, Cid cid);

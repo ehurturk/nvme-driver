@@ -78,8 +78,6 @@ struct CompletionStatus {
 
     bool more() const;
 
-    operator int() const noexcept;
-
 private:
     using P = utils::BitField<std::uint16_t, 0, 1>;     // phase tag
     using SC = utils::BitField<std::uint16_t, 1, 8>;    // status code
