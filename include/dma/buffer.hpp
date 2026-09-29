@@ -6,7 +6,6 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <utility>
 
 namespace dma {
 
@@ -15,7 +14,7 @@ using IOVA = std::uint64_t;
 // DmaBuffer: A buffer that is DMA'able across VFIO using IOMMU.
 // Owns a memory buffer that is memory mapped using MAP_SHARED and MAP_ANONYMOUS flags.
 // Owned memory buffer will have a mapping of memory process virtual address to the allocated
-// IO virtual address, via the provided VfioContainer.
+// IO virtual address via the provided VfioContainer
 class DmaBuffer {
 public:
     // create and map a anon+shared host memory, and then map the UVA to an IOVA via VfioContainer

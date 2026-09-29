@@ -13,11 +13,13 @@
 #include <cassert>
 #include <chrono>
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <format>
 #include <memory>
 #include <optional>
+#include <span>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -71,34 +73,69 @@ public:
 
     // submits an admin command and blocks until its own completion arrives
     template<CommandDescriptor Command>
-    Result<wire::CompletionEntry> execute_admin_command(Command cmd) {
-        auto submitted = submit_admin_command(std::move(cmd));
-        if (!submitted) {
-            return std::unexpected{submitted.error()};
+    Result<typename Command::Completion> execute(const Command& command) {
+        return submit_admin_command(command).and_then([](auto&& pending) {
+            return pending.result();
+        });
+    }
+
+    template<DataCommand Command>
+    Result<typename Command::Data> execute(const Command& command) {
+        const std::size_t size = command.data_size();
+        dma::DmaBuffer buffer = heap_->alloc(size, configuration_.nvme_page_size);
+        const dma::DmaView data{buffer};
+
+        auto pending = submit_to<Command>(
+            constants::ADMIN_QID,
+            [&](std::uint16_t cid) noexcept {
+                return command.build(cid, data);
+            },
+            std::move(buffer)
+        );
+        if (!pending) {
+            return std::unexpected{std::move(pending.error())};
         }
 
-        return submitted->wait();
+        return pending->wait()
+            .and_then([](const wire::CompletionEntry& completion) {
+                return succeeded(Command::name, completion);
+            })
+            .transform([&](const wire::CompletionEntry&) {
+                return command.decode(std::span<const std::byte>{data.uva, size});
+            });
+    }
+
+    // submits an io command to the queue pair qid and blocks until its own completion arrives
+    template<TransferCommand Command>
+    Result<dma::DmaBuffer> execute(QueueId qid, const Command& command, dma::DmaBuffer buffer) {
+        auto pending = submit_io_command(qid, command, std::move(buffer));
+        if (!pending) {
+            return std::unexpected{std::move(pending.error())};
+        }
+
+        return pending->wait()
+            .and_then([](const wire::CompletionEntry& completion) {
+                return succeeded(Command::name, completion);
+            })
+            .transform([&](const wire::CompletionEntry&) {
+                return std::move(*pending->buffer_);
+            });
     }
 
     // pushes the command into the admin SQ and returns a CommandPending handle tied to this command's type
     template<CommandDescriptor Command>
-    Result<CommandPending<Command>> submit_admin_command(Command command) {
-        return submit_to(constants::ADMIN_QID, std::move(command));
+    Result<CommandPending<Command>> submit_admin_command(const Command& command) {
+        return submit_to<Command>(
+            constants::ADMIN_QID,
+            [&](std::uint16_t cid) noexcept {
+                return command.build(cid);
+            },
+            std::nullopt
+        );
     }
 
-    // submits an io command to the queue pair qid and blocks until its own completion arrives
-    template<CommandDescriptor Command>
-    Result<wire::CompletionEntry> execute_io_command(QueueId qid, Command cmd) {
-        auto submitted = submit_io_command(qid, std::move(cmd));
-        if (!submitted) {
-            return std::unexpected{submitted.error()};
-        }
-
-        return submitted->wait();
-    }
-
-    template<CommandDescriptor Command>
-    Result<CommandPending<Command>> submit_io_command(QueueId qid, Command command) {
+    template<TransferCommand Command>
+    Result<CommandPending<Command>> submit_io_command(QueueId qid, const Command& command, dma::DmaBuffer buffer) {
         if (io_queue(qid) == nullptr) {
             return std::unexpected{Error{
                 .reason = std::format("IO queue {} does not exist on this controller", qid.value),
@@ -106,7 +143,14 @@ public:
             }};
         }
 
-        return submit_to(qid, std::move(command));
+        const dma::DmaView data{buffer};
+        return submit_to<Command>(
+            qid,
+            [&](std::uint16_t cid) noexcept {
+                return command.build(cid, data);
+            },
+            std::move(buffer)
+        );
     }
 
     const Queue& admin_queue() const;
@@ -126,18 +170,18 @@ public:
     void grant_io_queues(std::uint16_t count);
 
     // allocates a queue id and the host memory backing that queue pair
-    Result<QueueId> add_io_queue_pair(dma::DmaHeap& heap, std::size_t depth);
+    Result<QueueId> add_io_queue_pair(std::size_t depth);
 
     void remove_io_queue_pair(QueueId qid);
 
 private:
-    template<CommandDescriptor Command>
+    template<typename Command>
     friend class CommandPending;
 
-    template<CommandDescriptor Command>
-    Result<CommandPending<Command>> submit_to(QueueId qid, const Command& command) {
-        return queue(qid)->submit(command).transform([&](Cid cid) {
-            return CommandPending<Command>{*this, qid, cid};
+    template<typename Command, std::invocable<std::uint16_t> Build>
+    Result<CommandPending<Command>> submit_to(QueueId qid, Build&& build, std::optional<dma::DmaBuffer> buffer) {
+        return queue(qid)->submit(std::forward<Build>(build)).transform([&](Cid cid) {
+            return CommandPending<Command>{*this, qid, cid, std::move(buffer)};
         });
     }
 
@@ -151,7 +195,7 @@ private:
     // non-blockingly drains whatever completions are visible on the cq
     std::optional<Result<wire::CompletionEntry>> try_poll_command(QueueId qid, Cid cid);
 
-    void abandon_command(QueueId qid, Cid cid);
+    void abandon_command(QueueId qid, Cid cid, std::optional<dma::DmaBuffer> buffer);
 
     bool wait_for(std::predicate auto&& predicate, std::chrono::milliseconds timeout) {
         auto deadline = std::chrono::steady_clock::now() + timeout;
@@ -179,6 +223,7 @@ private:
     //
     ControllerRegisters regs_;
     const ControllerConfiguration configuration_;
+    dma::DmaHeap* heap_;
 
     std::vector<std::unique_ptr<Queue>> queues_;
 
@@ -189,15 +234,16 @@ private:
     std::uint16_t io_qid_grant_{0};
 };
 
-template<CommandDescriptor Command>
+template<typename Command>
 CommandPending<Command>::CommandPending(CommandPending&& other) noexcept
     : controller_{std::exchange(other.controller_, nullptr)},
       qid_{other.qid_},
       cid_{other.cid_},
-      completion_{other.completion_} {
+      completion_{other.completion_},
+      buffer_{std::move(other.buffer_)} {
 }
 
-template<CommandDescriptor Command>
+template<typename Command>
 CommandPending<Command>& CommandPending<Command>::operator=(CommandPending&& other) noexcept {
     if (this != &other) {
         release();
@@ -205,31 +251,32 @@ CommandPending<Command>& CommandPending<Command>::operator=(CommandPending&& oth
         qid_ = other.qid_;
         cid_ = other.cid_;
         completion_ = other.completion_;
+        buffer_ = std::move(other.buffer_);
     }
     return *this;
 }
 
-template<CommandDescriptor Command>
+template<typename Command>
 CommandPending<Command>::~CommandPending() {
     release();
 }
 
-template<CommandDescriptor Command>
+template<typename Command>
 Cid CommandPending<Command>::cid() const {
     return cid_;
 }
 
-template<CommandDescriptor Command>
+template<typename Command>
 QueueId CommandPending<Command>::queue_id() const {
     return qid_;
 }
 
-template<CommandDescriptor Command>
+template<typename Command>
 bool CommandPending<Command>::done() const {
     return completion_.has_value();
 }
 
-template<CommandDescriptor Command>
+template<typename Command>
 std::optional<Result<wire::CompletionEntry>> CommandPending<Command>::poll() {
     if (completion_.has_value()) {
         return completion_;
@@ -245,7 +292,7 @@ std::optional<Result<wire::CompletionEntry>> CommandPending<Command>::poll() {
     return polled;
 }
 
-template<CommandDescriptor Command>
+template<typename Command>
 Result<wire::CompletionEntry> CommandPending<Command>::wait() {
     if (completion_.has_value()) {
         return *completion_;
@@ -261,37 +308,38 @@ Result<wire::CompletionEntry> CommandPending<Command>::wait() {
     return waited;
 }
 
-template<CommandDescriptor Command>
-Result<typename Command::Completion> CommandPending<Command>::result() {
-    auto waited = wait();
-    if (!waited.has_value()) {
-        return std::unexpected{std::move(waited.error())};
-    }
-
-    if (!waited->ok()) {
-        return std::unexpected{Error{
-            .reason = std::format("CID {} completed with error status: {}", cid_, waited->status),
-            .severity = Error::Severity::ERROR
-        }};
-    }
-
-    return Command::decode_completion(*waited);
+template<typename Command>
+auto CommandPending<Command>::result()
+    requires CommandDescriptor<Command>
+{
+    return wait()
+        .and_then([](const wire::CompletionEntry& completion) {
+            return succeeded(Command::name, completion);
+        })
+        .transform([](const wire::CompletionEntry& completion) {
+            return Command::decode_completion(completion);
+        });
 }
 
-template<CommandDescriptor Command>
-CommandPending<Command>::CommandPending(Controller& controller, QueueId qid, Cid cid)
-    : controller_{&controller}, qid_{qid}, cid_{cid} {
+template<typename Command>
+CommandPending<Command>::CommandPending(
+    Controller& controller,
+    QueueId qid,
+    Cid cid,
+    std::optional<dma::DmaBuffer> buffer
+)
+    : controller_{&controller}, qid_{qid}, cid_{cid}, buffer_{std::move(buffer)} {
 }
 
-template<CommandDescriptor Command>
+template<typename Command>
 void CommandPending<Command>::release() {
     if (controller_ != nullptr && !completion_.has_value()) {
-        controller_->abandon_command(qid_, cid_);
+        controller_->abandon_command(qid_, cid_, std::exchange(buffer_, std::nullopt));
     }
     controller_ = nullptr;
 }
 
-template<CommandDescriptor Command>
+template<typename Command>
 Error CommandPending<Command>::empty_handle_diagnostic() const {
     return Error{
         .reason = std::format("CommandPending for CID {} is empty (moved-from)", cid_),

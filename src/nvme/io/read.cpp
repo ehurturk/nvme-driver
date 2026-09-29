@@ -7,7 +7,6 @@
 namespace nvme::io::commands {
 
 Read::Read(
-    dma::DmaView read_buffer,
     DWRD nsid,
     std::uint64_t starting_lba,
     std::uint16_t nr_blocks_to_read,
@@ -15,8 +14,7 @@ Read::Read(
     bool limited_retry,
     bool force_unit_access
 )
-    : _read_buffer{read_buffer},
-      _nsid{nsid},
+    : _nsid{nsid},
       _starting_lba{starting_lba},
       _nr_blocks_to_read{nr_blocks_to_read},
       _limited_retry{limited_retry},
@@ -31,7 +29,7 @@ Read::Read(
     _dataset_management = dataset_mgmt.get();
 }
 
-wire::SubmissionEntry Read::build(std::uint16_t this_cid) const noexcept {
+wire::SubmissionEntry Read::build(std::uint16_t this_cid, dma::DmaView data) const noexcept {
     wire::SubmissionEntry entry = build_base(Opcode::Read, this_cid);
 
     // get low bits of starting lba
@@ -48,7 +46,7 @@ wire::SubmissionEntry Read::build(std::uint16_t this_cid) const noexcept {
     entry.cdw13 = _dataset_management;
 
     entry.nsid = _nsid;
-    entry.dptr = wire::DataPointer::prp(_read_buffer.iova); // TODO: once the buffer is more than a page we really shd use prp lists
+    entry.dptr = wire::DataPointer::prp(data.iova); // TODO: once the buffer is more than a page we really shd use prp lists
 
     return entry;
 }

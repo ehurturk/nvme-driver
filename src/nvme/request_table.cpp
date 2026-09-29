@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <format>
 #include <stdexcept>
+#include <utility>
 
 namespace nvme {
 
@@ -79,7 +80,7 @@ std::optional<wire::CompletionEntry> RequestTable::take(Cid cid) {
     return completion;
 }
 
-void RequestTable::abandon(Cid cid) {
+void RequestTable::abandon(Cid cid, std::optional<dma::DmaBuffer> buffer) {
     Slot* slot = find(cid);
     if (slot == nullptr) {
         return;
@@ -89,6 +90,7 @@ void RequestTable::abandon(Cid cid) {
         release(cid);
     } else if (slot->state == State::InFlight) {
         slot->state = State::Abandoned;
+        slot->buffer = std::move(buffer);
     }
 }
 

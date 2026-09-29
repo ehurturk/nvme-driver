@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dma/buffer.hpp"
 #include "nvme/cid.hpp"
 #include "nvme/command.hpp"
 #include "nvme/queue_entry.hpp"
@@ -40,7 +41,7 @@ public:
     /// @brief Stop waiting on the given CID. If the given CID command was completed before, calling complete() after
     /// this will result in a return of Error from complete(). Also, if the given CID was in flight, calling complete()
     /// after this call will free that CID.
-    void abandon(Cid cid);
+    void abandon(Cid cid, std::optional<dma::DmaBuffer> buffer);
 
 private:
     enum class State : std::uint8_t {
@@ -52,7 +53,8 @@ private:
 
     struct Slot {
         State state = State::Free;
-        wire::CompletionEntry completion{};  // TODO: should this be a shared_ptr?
+        wire::CompletionEntry completion{};
+        std::optional<dma::DmaBuffer> buffer;
     };
 
     Slot* find(Cid cid);

@@ -110,13 +110,19 @@ std::uint32_t ErrorLogEntry::nsid() const {
 
 namespace commands {
 
-wire::SubmissionEntry GetLogPage::build(std::uint16_t this_cid) const noexcept {
+std::size_t GetLogPage::data_size() const {
+    return std::size_t{num_dwords} * 4;
+}
+
+wire::SubmissionEntry GetLogPage::build(std::uint16_t this_cid, dma::DmaView data) const noexcept {
+    assert(data.size >= data_size());
+
     auto c = build_base(Opcode::GetLogPage, this_cid);
 
     const std::uint32_t numd = utils::to_zero_based(num_dwords);
 
     c.nsid = nsid;
-    c.dptr = wire::DataPointer::prp(prp1);
+    c.dptr = wire::DataPointer::prp(data.iova);
     c.cdw10 = utils::DwordBuilder<>{}
                   .set<LID>(utils::to_underlying(lid))
                   .set<RAE>(retain_async_event)
@@ -129,8 +135,8 @@ wire::SubmissionEntry GetLogPage::build(std::uint16_t this_cid) const noexcept {
     return c;
 }
 
-GetLogPage::Completion GetLogPage::decode_completion(const wire::CompletionEntry&) {
-    return Completion{};
+GetLogPage::Data GetLogPage::decode(std::span<const std::byte> bytes) const {
+    return Data{bytes.begin(), bytes.end()};
 }
 
 }  // namespace commands

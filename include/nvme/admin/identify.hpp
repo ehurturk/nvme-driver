@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <span>
@@ -73,6 +74,7 @@ class IdentifyActiveNamespaceIdListData;
 class IdentifyNamespaceIdentificationDescriptorListData;  // TODO: change this name ffs
 
 struct IdentifyController {
+    static constexpr std::string_view name = "Identify Controller";
     using Data = IdentifyControllerData;
     static constexpr auto cns = IdentifyCns::Controller;
     static constexpr std::uint16_t cntid = 0;
@@ -81,6 +83,7 @@ struct IdentifyController {
 };
 
 struct IdentifyNamespace {  // NSID should be supplied in the command
+    static constexpr std::string_view name = "Identify Namespace";
     using Data = IdentifyNamespaceData;
     static constexpr auto cns = IdentifyCns::Namespace;
     static constexpr std::uint16_t cntid = 0;
@@ -91,6 +94,7 @@ struct IdentifyNamespace {  // NSID should be supplied in the command
 // returns a list of 1024 NSIDs that contains active NSIDs in increasing order that are
 // greater than the value specified in the NSID field of the command
 struct IdentifyActiveNamespaceIdList {
+    static constexpr std::string_view name = "Identify Active Namespace ID List";
     using Data = IdentifyActiveNamespaceIdListData;
     static constexpr auto cns = IdentifyCns::ActiveNamespaceIdList;
     static constexpr std::uint16_t cntid = 0;
@@ -99,6 +103,7 @@ struct IdentifyActiveNamespaceIdList {
 };
 
 struct IdentifyNamespaceIdentificationDescriptorList {  // NSID should be supplied in the command
+    static constexpr std::string_view name = "Identify Namespace Identification Descriptor List";
     using Data = IdentifyNamespaceIdentificationDescriptorListData;
     static constexpr auto cns = IdentifyCns::NamespaceIdentificationDescriptorList;
     static constexpr std::uint16_t cntid = 0;
@@ -224,27 +229,32 @@ class Identify {
 public:
     using Data = typename Target::Data;
 
+    static constexpr std::string_view name = Target::name;
+
     static constexpr IdentifyCnsProps PROPS = identify_props[static_cast<std::size_t>(Target::cns)];
 
-    explicit Identify(dma::DmaView result)
+    Identify()
         requires(!PROPS.nsid_used)
-        : result_{result} {
-        assert(result_.size >= Data::SIZE && "identify result buffer is too small");
-    }
+    = default;
 
-    Identify(dma::DmaView result, std::uint32_t nsid)
+    explicit Identify(std::uint32_t nsid)
         requires(PROPS.nsid_used)
-        : result_{result}, nsid_{nsid} {
-        assert(result_.size >= Data::SIZE && "identify result buffer is too small");
+        : nsid_{nsid} {
     }
 
-    wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept {
+    std::size_t data_size() const {
+        return Data::SIZE;
+    }
+
+    wire::SubmissionEntry build(std::uint16_t this_cid, dma::DmaView data) const noexcept {
+        assert(data.size >= Data::SIZE && "identify result buffer is too small");
+
         // set CDW0.PSDT = 0x0 to indicate the use of PRPs for the transfer
         wire::SubmissionEntry c = build_base(Opcode::Identify, this_cid, wire::SubmissionEntry::Psdt::Prp);
 
         c.nsid = nsid_;
         // use only prp1 as a 4 KB buffer fits exactly into a page, so no need to use prp2
-        c.dptr = wire::DataPointer::prp(result_.iova);
+        c.dptr = wire::DataPointer::prp(data.iova);
         c.cdw10 = utils::DwordBuilder<>{}
                       .set<CNS>(utils::to_underlying(cns))
                       .template set<CNTID>(cntid)
@@ -257,19 +267,8 @@ public:
         return c;
     }
 
-    // decodes the result buffer the controller has dma'd into
-    // probably is UB when called when command is not completed yet
-    Data data() const {
-        return Data{result_.uva};
-    }
-
-    // no need to look at Completion, as the controller DMAs the resulting data buffer that
-    // describes information about the NVM subsystem, the domain,  the controller or the namespaces
-    // to the DPTR. the data structure is 4096 bytes in size
-    struct Completion {};
-
-    static Completion decode_completion(const wire::CompletionEntry&) {
-        return Completion{};
+    Data decode(std::span<const std::byte> bytes) const {
+        return Data{bytes.data()};
     }
 
 private:
@@ -283,7 +282,6 @@ private:
     static constexpr auto cnssid = Target::cnssid;
     static constexpr auto csi = Target::csi;
 
-    dma::DmaView result_;
     std::uint32_t nsid_ = 0;
 };
 
@@ -298,9 +296,9 @@ using IdentifyControllerType = Identify<IdentifyController>;
 using IdentifyActiveNamespaceIdListType = Identify<IdentifyActiveNamespaceIdList>;
 
 // check whether the identify types are command descriptors:
-static_assert(CommandDescriptor<IdentifyControllerType>);
-static_assert(CommandDescriptor<IdentifyNamespaceType>);
-static_assert(CommandDescriptor<IdentifyActiveNamespaceIdListType>);
+static_assert(DataCommand<IdentifyControllerType>);
+static_assert(DataCommand<IdentifyNamespaceType>);
+static_assert(DataCommand<IdentifyActiveNamespaceIdListType>);
 
 }  // namespace commands
 

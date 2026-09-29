@@ -10,11 +10,13 @@
 #include "nvme/request_table.hpp"
 #include "nvme/submission_queue.hpp"
 
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <format>
 #include <optional>
+#include <utility>
 
 namespace nvme {
 
@@ -49,8 +51,8 @@ public:
     dma::DmaView cq_region() const;
 
     /// @brief Allocates a CID for the given command and pushes the built SubmissionEntry to the submission queue
-    template<CommandDescriptor Command>
-    Result<Cid> submit(const Command& command) {
+    template<std::invocable<std::uint16_t> Build>
+    Result<Cid> submit(Build&& build) {
         if (sq_.full()) {
             return std::unexpected{Error{
                 .reason = std::format("Submission queue {} is full", qid_.value),
@@ -70,7 +72,7 @@ public:
         }
         const Cid cmd_id = *allocated;
 
-        if (!sq_.push(command.build(cmd_id.value))) {
+        if (!sq_.push(std::forward<Build>(build)(cmd_id.value))) {
             requests_.cancel(cmd_id);
             return std::unexpected{Error{
                 .reason = std::format("Submission queue {} rejected the command", qid_.value),
@@ -81,16 +83,16 @@ public:
         return cmd_id;
     }
 
-    /// @brief Wait until the given CID command is completed and placed in the completion queue. Waiting more than the
-    /// timeout will result in an Error without an empty completion entry returned
+    /// @brief Wait blockingly until the given CID command is completed and placed in the completion queue. Waiting more
+    /// than the timeout will result in an Error without an empty completion entry returned
     Result<wire::CompletionEntry> wait(Cid cid);
 
-    /// @brief Polls the completion queue until it finds the command CID. If it finds any existing completed commands
-    /// along the way, marks them as completed as well, so performs a sweep poll
+    /// @brief Sweeps the completion entries in the completion queue until it finds the command CID, marking them
+    /// complete. This is non blocking and doesn't wait until CID arrives
     std::optional<Result<wire::CompletionEntry>> poll(Cid cid);
 
     /// @brief Discards the given CID
-    void abandon(Cid cid);
+    void abandon(Cid cid, std::optional<dma::DmaBuffer> buffer);
 
 private:
     static std::size_t region_bytes(std::size_t depth, std::size_t entry_size, std::size_t page_size);

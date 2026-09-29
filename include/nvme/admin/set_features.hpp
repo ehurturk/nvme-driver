@@ -7,6 +7,7 @@
 #include "utils.hpp"
 
 #include <cstdint>
+#include <string_view>
 
 namespace nvme::admin::commands {
 
@@ -33,6 +34,8 @@ namespace nvme::admin::commands {
 // CDW14: bits 0 - 6: UUID index
 template<features::Feature F>
 struct SetFeatures {
+    static constexpr std::string_view name = "Set Features";
+
     explicit SetFeatures(F feature, bool save = false, std::uint8_t uuid_index = 0)
         : feature{std::move(feature)}, save{save}, uuid_index{uuid_index} {
     }
@@ -70,6 +73,8 @@ private:
 
 template<features::Feature F>
 struct GetFeatures {
+    static constexpr std::string_view name = "Get Features";
+
     explicit GetFeatures(
         features::Select sel = features::Select::Current,
         std::uint8_t uuid_index = 0

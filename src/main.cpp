@@ -20,15 +20,15 @@
 #include <optional>
 #include <print>
 #include <string>
+#include <utility>
 
 namespace {
 
 const std::string NVME_PCI_ADDR{"0000:01:00.0"};
 constexpr int NVME_GROUP_ID = 6;
 
-std::optional<nvme::ControllerState>
-execute_identify_controller_command(nvme::Controller& controller, dma::DmaHeap& heap) {
-    auto identify_result = nvme::admin::identify_controller(controller, heap);
+std::optional<nvme::ControllerState> execute_identify_controller_command(nvme::Controller& controller) {
+    auto identify_result = nvme::admin::identify_controller(controller);
 
     if (!identify_result) {
         std::println("[ERROR]: {}", identify_result.error().reason);
@@ -56,12 +56,8 @@ execute_identify_controller_command(nvme::Controller& controller, dma::DmaHeap& 
     return state;
 }
 
-void execute_identify_namespace_commands(
-    nvme::Controller& controller,
-    dma::DmaHeap& dma_heap,
-    nvme::ControllerState& state
-) {
-    auto nsids = nvme::admin::list_active_namespaces(controller, dma_heap);
+void execute_identify_namespace_commands(nvme::Controller& controller, nvme::ControllerState& state) {
+    auto nsids = nvme::admin::list_active_namespaces(controller);
     if (!nsids) {
         std::println("[ERROR]: {}", nsids.error().reason);
         return;
@@ -71,7 +67,7 @@ void execute_identify_namespace_commands(
 
     for (const std::uint32_t nsid : *nsids) {
         nvme::Result<nvme::admin::IdentifyNamespaceData> ns =
-            nvme::admin::identify_namespace(controller, dma_heap, nsid);
+            nvme::admin::identify_namespace(controller, nsid);
 
         if (!ns) {
             std::println("[ERROR]: {}", ns.error().reason);
@@ -98,8 +94,8 @@ void execute_identify_namespace_commands(
     }
 }
 
-void execute_read_logs_command(nvme::Controller& controller, dma::DmaHeap& dma_heap) {
-    auto smart = nvme::admin::read_smart_log(controller, dma_heap);
+void execute_read_logs_command(nvme::Controller& controller) {
+    auto smart = nvme::admin::read_smart_log(controller);
     if (!smart) {
         std::println("[ERROR]: {}", smart.error().reason);
         return;
@@ -114,7 +110,7 @@ void execute_read_logs_command(nvme::Controller& controller, dma::DmaHeap& dma_h
         smart->data_units_written()
     );
 
-    auto errors = nvme::admin::read_error_log(controller, dma_heap);
+    auto errors = nvme::admin::read_error_log(controller);
     if (!errors) {
         std::println("[ERROR]: {}", errors.error().reason);
         return;
@@ -145,15 +141,15 @@ int main() {
             return EXIT_FAILURE;
         }
 
-        auto state = execute_identify_controller_command(controller, dma_heap);
+        auto state = execute_identify_controller_command(controller);
         if (!state) {
             return EXIT_FAILURE;
         }
 
-        execute_identify_namespace_commands(controller, dma_heap, *state);
+        execute_identify_namespace_commands(controller, *state);
         controller.set_state(std::move(*state));
 
-        execute_read_logs_command(controller, dma_heap);
+        execute_read_logs_command(controller);
 
         {
             auto allocated = na::set_number_of_queues(controller, nvme::constants::NR_IO_SQ, nvme::constants::NR_IO_CQ);
@@ -167,7 +163,7 @@ int main() {
             std::println("# of IOCQs allocated: {}", allocated->allocated_cq);
         }
 
-        nvme::Result<nvme::QueueId> io_qid = na::create_io_queue_pair(controller, dma_heap, nvme::constants::IO_DEPTH);
+        nvme::Result<nvme::QueueId> io_qid = na::create_io_queue_pair(controller, nvme::constants::IO_DEPTH);
 
         if (!io_qid) {
             std::println("[ERROR]: {}", io_qid.error().reason);
@@ -190,34 +186,9 @@ int main() {
 
             std::memcpy(write_buf.uva(), buf.data(), buf.size());
 
-            const nvme::io::commands::Write write_cmd{dma::DmaView{write_buf}, 1, 0x0, 3};
-
-            auto done = controller.execute_io_command(*io_qid, write_cmd);
-            if (!done) {
-                std::println("[ERROR]: {}", done.error().reason);
-                return EXIT_FAILURE;
-            }
-
-            if (!done->ok()) {
-                std::println("[ERROR]: Command Error: {}", done->status.succeeded());
-                std::println("[ERROR]: Command Error: {}", done->status.status_code());
-                std::println("[ERROR]: Command Error: {}", static_cast<uint8_t>(done->status.status_code_type()));
-                return EXIT_FAILURE;
-            }
-
-            auto result = nvme::io::commands::Write::decode_completion(*done);
-            if (result.conflicting_attributes) {
-                std::println("[ERROR]: Command status error: conflicting attributes");
-                return EXIT_FAILURE;
-            }
-
-            if (result.invalid_prot_information) {
-                std::println("[ERROR]: Command status error: invalid protection information");
-                return EXIT_FAILURE;
-            }
-
-            if (result.write_to_ro_page) {
-                std::println("[ERROR]: Command status error: writing to a read only page");
+            auto written = controller.execute(*io_qid, nvme::io::commands::Write{1, 0x0, 3}, std::move(write_buf));
+            if (!written) {
+                std::println("[ERROR]: {}", written.error().reason);
                 return EXIT_FAILURE;
             }
 
@@ -226,33 +197,18 @@ int main() {
 
         // read from namespace id 1 from starting LBA 0 and read 4 LBAs
         {
-            dma::DmaBuffer read_buf = dma_heap.alloc(512ull * 4, controller.configuration().nvme_page_size);
-            const nvme::io::commands::Read read_cmd{dma::DmaView{read_buf}, 1, 0x0, 3};
-
-            auto done = controller.execute_io_command(*io_qid, read_cmd);
-            if (!done) {
-                std::println("[ERROR]: {}", done.error().reason);
-                return EXIT_FAILURE;
-            }
-
-            if (!done->ok()) {
-                std::println("[ERROR]: Command Error");
-                return EXIT_FAILURE;
-            }
-
-            auto result = nvme::io::commands::Read::decode_completion(*done);
-            if (result.conflicting_attributes) {
-                std::println("[ERROR]: Command status error: conflicting attributes");
-                return EXIT_FAILURE;
-            }
-
-            if (result.invalid_prot_information) {
-                std::println("[ERROR]: Command status error: invalid protection information");
+            auto read = controller.execute(
+                *io_qid,
+                nvme::io::commands::Read{1, 0x0, 3},
+                dma_heap.alloc(512ull * 4, controller.configuration().nvme_page_size)
+            );
+            if (!read) {
+                std::println("[ERROR]: {}", read.error().reason);
                 return EXIT_FAILURE;
             }
 
             std::array<std::byte, 2048ull> res{};
-            std::memcpy(res.data(), read_buf.uva(), res.size());
+            std::memcpy(res.data(), read->uva(), res.size());
 
             // hexdump the result
             utils::hexdump(res);

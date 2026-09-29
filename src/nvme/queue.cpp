@@ -11,6 +11,7 @@
 #include <limits>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 
 namespace {
 nvme::Error not_in_flight(nvme::Cid cid) {
@@ -123,8 +124,8 @@ std::optional<Result<wire::CompletionEntry>> Queue::poll(Cid cid) {
     return requests_.take(cid);
 }
 
-void Queue::abandon(Cid cid) {
-    requests_.abandon(cid);
+void Queue::abandon(Cid cid, std::optional<dma::DmaBuffer> buffer) {
+    requests_.abandon(cid, std::move(buffer));
 }
 
 std::optional<Error> Queue::write_complete(const wire::CompletionEntry& completion) {

@@ -5,11 +5,14 @@
 #include "nvme/io/types.hpp"
 #include "utils.hpp"
 
+#include <string_view>
+
 namespace nvme::io::commands {
 
 class Read {
 public:
-    /// @param read_buffer: specifies where the data is transferred to
+    static constexpr std::string_view name = "Read";
+
     /// @param nsid: the namespace identifier to read from
     /// @param starting_lba: 64 bit address of the first logical block to be read
     /// @param nr_blocks_to_read: number of logical blocks to read, is 0s based
@@ -21,7 +24,6 @@ public:
     /// to non volatile media and returns the data that are read from the media with no implied
     /// ordering
     Read(
-        dma::DmaView read_buffer,
         DWRD nsid,
         std::uint64_t starting_lba,
         std::uint16_t nr_blocks_to_read,
@@ -30,7 +32,7 @@ public:
         bool force_unit_access = false
     );
 
-    wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
+    wire::SubmissionEntry build(std::uint16_t this_cid, dma::DmaView data) const noexcept;
 
     struct Completion {
         static constexpr std::uint8_t CONFLICTING_ATTRIBUTES_STATUS_VAL = 0x80;
@@ -69,7 +71,6 @@ private:
     using CDW15_ELBAT = utils::BitField<DWRD, 0, 16>;
 
     // state:
-    dma::DmaView _read_buffer; // DPTR
     DWRD _nsid;
     std::uint64_t _starting_lba;        // CDW10: bits 31:00, CDW11: bits 63:32
     std::uint16_t _nr_blocks_to_read;   // CDW12 bits 15:00
@@ -78,6 +79,6 @@ private:
     bool _force_unit_access;            // CDW12 bit 30
 };
 
-static_assert(CommandDescriptor<Read>);
+static_assert(TransferCommand<Read>);
 
 }  // namespace nvme::io::commands

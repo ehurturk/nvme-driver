@@ -5,12 +5,15 @@
 #include "utils.hpp"
 
 #include <cstdint>
+#include <string_view>
 
 namespace nvme::admin::commands {
 
 // abort (0x08)
 // completion dw0 bit 0: 1 = not aborted, 0 = abort was not applied
 struct Abort {
+    static constexpr std::string_view name = "Abort";
+
     Abort(QueueId sqid, std::uint16_t cid) : sqid{sqid.value}, cid{cid} {
     }
 

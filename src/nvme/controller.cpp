@@ -22,9 +22,10 @@ namespace nvme {
 Controller::Controller(NvmeDeviceHandle device)
     : regs_{device.bar_region()},
       configuration_{ControllerConfiguration::select(regs_.cap(), device.dma_heap().geometry())},
+      heap_{&device.dma_heap()},
       timeout_{125ms} {
     queues_.push_back(
-        std::make_unique<Queue>(constants::ADMIN_QID, device.dma_heap(), regs_, constants::AQ_DEPTH, configuration_)
+        std::make_unique<Queue>(constants::ADMIN_QID, *heap_, regs_, constants::AQ_DEPTH, configuration_)
     );
 
     const auto vs = regs_.vs();
@@ -196,9 +197,9 @@ Result<QueueId> Controller::allocate_io_qid() {
     }};
 }
 
-Result<QueueId> Controller::add_io_queue_pair(dma::DmaHeap& heap, std::size_t depth) {
+Result<QueueId> Controller::add_io_queue_pair(std::size_t depth) {
     return allocate_io_qid().and_then([&](const QueueId& id) -> Result<QueueId> {
-        queues_[id.value] = std::make_unique<Queue>(id, heap, regs_, depth, configuration_);
+        queues_[id.value] = std::make_unique<Queue>(id, *heap_, regs_, depth, configuration_);
         return id;
     });
 }
@@ -247,9 +248,9 @@ std::optional<Result<wire::CompletionEntry>> Controller::try_poll_command(QueueI
     return q->poll(cid);
 }
 
-void Controller::abandon_command(QueueId qid, Cid cid) {
+void Controller::abandon_command(QueueId qid, Cid cid, std::optional<dma::DmaBuffer> buffer) {
     if (Queue* q = queue(qid)) {
-        q->abandon(cid);
+        q->abandon(cid, std::move(buffer));
     }
 }
 

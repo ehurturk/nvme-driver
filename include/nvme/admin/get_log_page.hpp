@@ -10,7 +10,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <span>
+#include <string_view>
 #include <type_traits>
+#include <vector>
 
 namespace nvme::admin {
 
@@ -98,28 +101,25 @@ namespace commands {
 
 class GetLogPage {
 public:
+    static constexpr std::string_view name = "Get Log Page";
+
+    using Data = std::vector<std::byte>;
+
     GetLogPage(
-        dma::DmaView result,
         LogPageId lid,
         std::uint32_t num_dwords,
         std::uint32_t nsid = 0xFFFFFFFF,
         bool retain_async_event = false,
         std::uint64_t offset = 0
     )
-        : prp1{result.iova},
-          lid{lid},
-          num_dwords{num_dwords},
-          nsid{nsid},
-          retain_async_event{retain_async_event},
-          offset{offset} {
-        assert(result.size >= std::size_t{num_dwords} * 4);
+        : lid{lid}, num_dwords{num_dwords}, nsid{nsid}, retain_async_event{retain_async_event}, offset{offset} {
     }
 
-    wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
+    std::size_t data_size() const;
 
-    struct Completion {};
+    wire::SubmissionEntry build(std::uint16_t this_cid, dma::DmaView data) const noexcept;
 
-    static Completion decode_completion(const wire::CompletionEntry&);
+    Data decode(std::span<const std::byte> bytes) const;
 
 private:
     using LID = utils::BitField<DWRD, 0, 8>;
@@ -127,7 +127,6 @@ private:
     using NUMDL = utils::BitField<DWRD, 16, 16>;
     using NUMDU = utils::BitField<DWRD, 0, 16>;
 
-    std::uint64_t prp1;
     LogPageId lid;
     std::uint32_t num_dwords;
     std::uint32_t nsid;
@@ -135,7 +134,7 @@ private:
     std::uint64_t offset;
 };
 
-static_assert(CommandDescriptor<GetLogPage>);
+static_assert(DataCommand<GetLogPage>);
 
 }  // namespace commands
 

@@ -5,7 +5,7 @@ PORT="${PORT:-2222}"
 DEST="${DEST:-root@localhost}"
 DEST_DIR="nvme_driver"
 
-FILES=(CMakeLists.txt include src tests design.md)
+FILES=(../CMakeLists.txt ../include ../src)
 
 cd "$(dirname "$0")"
 

@@ -8,6 +8,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <string_view>
 
 namespace nvme::admin::commands {
 
@@ -33,6 +34,8 @@ enum class QueuePriority : std::uint8_t {
 //              16 - 31: Interrupt Vector (IV): Transport specific (if PCIe it is MSI-X i think?)
 class CreateIoCq {
 public:
+    static constexpr std::string_view name = "Create IO CQ";
+
     CreateIoCq(
         dma::DmaView queue_buf,
         QueueId qid,
@@ -103,6 +106,8 @@ static_assert(CommandDescriptor<CreateIoCq>);
 //                       If this is 0x0 then this SQ is not associated with any NVM Set
 class CreateIoSq {
 public:
+    static constexpr std::string_view name = "Create IO SQ";
+
     CreateIoSq(
         dma::DmaView queue_buf,
         QueueId qid,

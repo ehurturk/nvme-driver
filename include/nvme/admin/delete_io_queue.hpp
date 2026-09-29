@@ -7,6 +7,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <string_view>
 
 namespace nvme::admin::commands {
 
@@ -17,6 +18,8 @@ namespace nvme::admin::commands {
 //       - Host shall ensure that any associated I/O Submission Queue is deleted
 //         deleted prior to deleting a CQ.
 struct DeleteIoCq {
+    static constexpr std::string_view name = "Delete IO CQ";
+
     explicit DeleteIoCq(QueueId qid) : qid{qid.value} {
     }
 
@@ -40,6 +43,8 @@ static_assert(CommandDescriptor<DeleteIoCq>);
 // NOTE: - After this command has been completed, the PRP List that describes
 //         the SQ may be deallocated by the host.
 struct DeleteIoSq {
+    static constexpr std::string_view name = "Delete IO SQ";
+
     explicit DeleteIoSq(QueueId qid) : qid{qid.value} {
     }
 

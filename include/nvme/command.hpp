@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dma/buffer.hpp"
 #include "nvme/admin/opcodes.hpp"
 #include "nvme/cid.hpp"
 #include "nvme/io/opcodes.hpp"
@@ -8,9 +9,13 @@
 
 #include <concepts>
 #include <cstdint>
+#include <cstddef>
 #include <expected>
+#include <format>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 
 namespace nvme {
 
@@ -48,9 +53,23 @@ wire::SubmissionEntry build_base(
 
 template<typename C>
 concept CommandDescriptor = requires(const C c, std::uint16_t cid, const wire::CompletionEntry& e) {
+    { C::name } -> std::convertible_to<std::string_view>;
     { c.build(cid) } noexcept -> std::same_as<wire::SubmissionEntry>;
     typename C::Completion;
     { C::decode_completion(e) } -> std::same_as<typename C::Completion>;
+};
+
+template<typename C>
+concept TransferCommand = requires(const C c, std::uint16_t cid, dma::DmaView data) {
+    { C::name } -> std::convertible_to<std::string_view>;
+    { c.build(cid, data) } noexcept -> std::same_as<wire::SubmissionEntry>;
+};
+
+template<typename C>
+concept DataCommand = TransferCommand<C> && requires(const C c, std::span<const std::byte> bytes) {
+    typename C::Data;
+    { c.data_size() } -> std::same_as<std::size_t>;
+    { c.decode(bytes) } -> std::same_as<typename C::Data>;
 };
 
 struct Error {
@@ -62,12 +81,25 @@ struct Error {
 
     std::string reason;
     Severity severity;
+    std::optional<wire::CompletionStatus> status{};
 };
 
 template<typename T>
 using Result = std::expected<T, Error>;
 
-template<CommandDescriptor Command>
+inline Result<wire::CompletionEntry> succeeded(std::string_view command, const wire::CompletionEntry& completion) {
+    if (completion.ok()) {
+        return completion;
+    }
+
+    return std::unexpected{Error{
+        .reason = std::format("{} completed with error status: {}", command, completion.status),
+        .severity = Error::Severity::ERROR,
+        .status = completion.status
+    }};
+}
+
+template<typename Command>
 class CommandPending {
 public:
     CommandPending(const CommandPending&) = delete;
@@ -92,12 +124,13 @@ public:
     Result<wire::CompletionEntry> wait();
 
     // blocking: waits and decodes the completion
-    Result<typename Command::Completion> result();
+    auto result()
+        requires CommandDescriptor<Command>;
 
 private:
     friend class Controller;
 
-    CommandPending(Controller& controller, QueueId qid, Cid cid);
+    CommandPending(Controller& controller, QueueId qid, Cid cid, std::optional<dma::DmaBuffer> buffer);
 
     void release();
 
@@ -107,6 +140,7 @@ private:
     QueueId qid_{};
     Cid cid_{};
     std::optional<wire::CompletionEntry> completion_;
+    std::optional<dma::DmaBuffer> buffer_;
 };
 
 }  // namespace nvme

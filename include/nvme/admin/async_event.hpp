@@ -6,10 +6,13 @@
 #include "utils.hpp"
 
 #include <cstdint>
+#include <string_view>
 
 namespace nvme::admin::commands {
 
 struct AsyncEventRequest {
+    static constexpr std::string_view name = "Asynchronous Event Request";
+
     wire::SubmissionEntry build(std::uint16_t this_cid) const noexcept;
 
     enum class AsynchronousEventType : std::uint8_t {
