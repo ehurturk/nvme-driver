@@ -4,3 +4,4 @@ build/
 *.qcow2
 *.img
 out/
+compile_commands.json

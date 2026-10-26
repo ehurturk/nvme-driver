@@ -46,7 +46,8 @@ wire::SubmissionEntry Read::build(std::uint16_t this_cid, dma::DmaView data) con
     entry.cdw13 = _dataset_management;
 
     entry.nsid = _nsid;
-    entry.dptr = wire::DataPointer::prp(data.iova); // TODO: once the buffer is more than a page we really shd use prp lists
+    entry.dptr =
+        wire::DataPointer::prp(data.iova);  // TODO: once the buffer is more than a page we really shd use prp lists
 
     return entry;
 }

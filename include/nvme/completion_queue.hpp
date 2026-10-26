@@ -1,5 +1,6 @@
 #pragma once
 
+#include "arch/io.hpp"
 #include "dma/buffer.hpp"
 #include "lifetime.hpp"
 #include "nvme/queue_entry.hpp"
@@ -52,8 +53,8 @@ public:
         if (status.phase() != expected_bit_) {
             return std::nullopt;
         }
-
-        std::atomic_thread_fence(std::memory_order_acquire);
+        
+        arch::io_rmb();
 
         Entry cqe = *e;
 

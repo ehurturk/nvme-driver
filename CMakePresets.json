@@ -1,0 +1,97 @@
+{
+    "version": 5,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 24,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            }
+        },
+        {
+            "name": "gcc",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_CXX_COMPILER": "g++"
+            }
+        },
+        {
+            "name": "clang",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
+            "name": "debug",
+            "displayName": "Debug (GCC, ASan + UBSan)",
+            "inherits": ["base", "gcc"],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "release",
+            "displayName": "Release (GCC, -O3 -g -march=native, LTO)",
+            "inherits": ["base", "gcc"],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "relwithdebinfo",
+            "displayName": "RelWithDebInfo (GCC, -O2 -g, frame pointers for perf)",
+            "inherits": ["base", "gcc"],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_CXX_FLAGS": "-fno-omit-frame-pointer"
+            }
+        },
+        {
+            "name": "debug-clang",
+            "displayName": "Debug (Clang, ASan + UBSan)",
+            "inherits": ["base", "clang"],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "release-clang",
+            "displayName": "Release (Clang, -O3 -march=native, LTO)",
+            "inherits": ["base", "clang"],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "relwithdebinfo-clang",
+            "displayName": "RelWithDebInfo (Clang, -O2 -g, frame pointers for perf)",
+            "inherits": ["base", "clang"],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_CXX_FLAGS": "-fno-omit-frame-pointer"
+            }
+        }
+    ],
+    "buildPresets": [
+        { "name": "debug", "configurePreset": "debug" },
+        { "name": "release", "configurePreset": "release" },
+        { "name": "relwithdebinfo", "configurePreset": "relwithdebinfo" },
+        { "name": "debug-clang", "configurePreset": "debug-clang" },
+        { "name": "release-clang", "configurePreset": "release-clang" },
+        { "name": "relwithdebinfo-clang", "configurePreset": "relwithdebinfo-clang" },
+        {
+            "name": "format",
+            "displayName": "clang-format all sources",
+            "configurePreset": "debug",
+            "targets": ["format"]
+        }
+    ]
+}

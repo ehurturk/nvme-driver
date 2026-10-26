@@ -139,12 +139,8 @@ bool VfioContainer::iova_range_valid(std::uint64_t base, std::size_t size) const
     }
 
     const std::uint64_t last = base + size - 1;
-    for (const auto& range : iova_ranges_) {
-        if (base >= range.first && last <= range.last) {
-            return true;
-        }
-    }
-    return false;
+
+    return std::ranges::any_of(iova_ranges_, [&](const auto& range) { return base >= range.first && last <= range.last; });
 }
 
 void VfioContainer::seed_iova_cursor() {

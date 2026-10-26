@@ -3,6 +3,7 @@
 #include "dma/buffer.hpp"
 #include "nvme/queue_entry.hpp"
 #include "nvme/spec.hpp"
+#include "arch/io.hpp"
 
 #include <atomic>
 #include <bit>
@@ -58,7 +59,7 @@ public:
     // rings the doorbell
     void commit() {
         // ensure writes are done before the doorbell update
-        std::atomic_thread_fence(std::memory_order_release);
+        arch::io_wmb();
 
         ring_tail_doorbell();
     }
