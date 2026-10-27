@@ -55,6 +55,10 @@ std::size_t DmaBuffer::size() const {
     return memory_.size();
 }
 
+DmaView DmaBuffer::subview(std::size_t offset, std::size_t len) const {
+    return DmaView{memory_.data() + offset, iova_ + offset, len};
+}
+
 DmaView::DmaView(const DmaBuffer& buffer)
     : uva{buffer.uva()}, iova{buffer.iova()}, size{buffer.size()} {
 }

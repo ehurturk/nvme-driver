@@ -11,6 +11,8 @@ namespace dma {
 
 using IOVA = std::uint64_t;
 
+struct DmaView;
+
 // DmaBuffer: A buffer that is DMA'able across VFIO using IOMMU.
 // Owns a memory buffer that is memory mapped using MAP_SHARED and MAP_ANONYMOUS flags.
 // Owned memory buffer will have a mapping of memory process virtual address to the allocated
@@ -34,6 +36,8 @@ public:
     std::byte* uva() const;
 
     std::size_t size() const;
+
+    DmaView subview(std::size_t offset, std::size_t len) const;
 
 private:
     vfio::VfioContainer* vfio_;
